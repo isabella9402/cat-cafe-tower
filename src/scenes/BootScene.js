@@ -48,6 +48,7 @@ class BootScene extends Phaser.Scene {
     this._makeParticleTextures();
     this._makePlaceholderCat();
     this._makeAuraTexture();
+    this._makeFireVignette();
 
     const loaded = this.textures.getTextureKeys()
       .filter((k) => k !== '__DEFAULT' && k !== '__MISSING' && k !== '__WHITE');
@@ -108,6 +109,23 @@ class BootScene extends Phaser.Scene {
     g.fillTriangle(cx - 4, cy + R * 0.1, cx + 4, cy + R * 0.1, cx, cy + R * 0.18);
     g.generateTexture('catPlaceholder', size, size);
     g.destroy();
+  }
+
+  // Edge vignette for fire mode: transparent centre -> orange edges (radial).
+  // Drawn onto a canvas texture the size of the logical game (540x960).
+  _makeFireVignette() {
+    if (this.textures.exists('fireVignette')) return;
+    const W = 540, H = 960;
+    const cv = this.textures.createCanvas('fireVignette', W, H);
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const grd = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.34,
+                                         W / 2, H / 2, Math.max(W, H) * 0.62);
+    grd.addColorStop(0, 'rgba(255,107,53,0)');
+    grd.addColorStop(1, 'rgba(255,107,53,0.55)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, W, H);
+    cv.refresh();
   }
 
   // A notched orange "magic-circle" ring — asymmetric so slow rotation reads.

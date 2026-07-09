@@ -1,24 +1,33 @@
 /* =========================================================================
  *  main — Phaser config + scene registration.
  *
- *  Sizes to the window (FIT + letterbox), transparent background (CSS paints
- *  the page bg), no built-in physics — the Helix logic is fully custom.
+ *  Fixed 9:16 portrait logical canvas (540x960) with FIT scaling: the canvas
+ *  keeps a phone-shaped aspect on every screen and is centered; the HTML/CSS
+ *  paints a soft sky behind the letterbox (no more solid pink bars).
  * ========================================================================= */
 
 const config = {
   type: Phaser.AUTO,
   parent: 'game',
-  width: window.innerWidth,
-  height: window.innerHeight,
-  transparent: true,
+  transparent: true,          // CSS paints the page background; the string
+                              // 'transparent' is NOT a valid Phaser color.
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: 540,               // logical game width  (9:16)
+    height: 960,              // logical game height
+    // NOTE: `resolution` is intentionally omitted — it is non-functional in
+    // Phaser 3.x and can blank the canvas. FIT already scales the 540x960
+    // backing store up crisply to the device.
   },
-  render: { antialias: true, roundPixels: false },
+  render: { antialias: true, pixelArt: false },
   scene: [BootScene, MenuScene, GameScene, GameOverScene],
 };
 
 // eslint-disable-next-line no-unused-vars
 const game = new Phaser.Game(config);
 window.game = game;
+
+// Re-center / re-fit on window resize & orientation change. (FIT already
+// listens for resize, but refresh() guarantees an immediate re-layout.)
+window.addEventListener('resize', () => game.scale.refresh());

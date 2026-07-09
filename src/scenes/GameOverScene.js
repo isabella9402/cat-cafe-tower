@@ -1,5 +1,7 @@
 /* =========================================================================
  *  GameOverScene — results panel (Korean), retry / menu. Kawaii theme.
+ *  Laid out for the fixed 540x960 canvas; panel is a Container so the whole
+ *  card can scale-in as one unit.
  * ========================================================================= */
 
 class GameOverScene extends Phaser.Scene {
@@ -8,10 +10,10 @@ class GameOverScene extends Phaser.Scene {
   init(data) { this.data_ = data || { score: 0, best: 0, isRecord: false, depth: 0 }; }
 
   create() {
-    const W = this.scale.width, H = this.scale.height;
+    const W = this.scale.width, H = this.scale.height;   // 540 x 960
     const d = this.data_;
 
-    // Guard against rapid taps double-firing a button (two fadeOut/scene.start).
+    // guard against rapid taps double-firing a button
     this._leaving = false;
     this.leaveTo = (target) => {
       if (this._leaving) return;
@@ -21,48 +23,63 @@ class GameOverScene extends Phaser.Scene {
     };
 
     addPastelBackground(this);
-    this.add.rectangle(W / 2, H / 2, W, H, 0x6b4f34, 0.14);
+    this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.5);   // dim overlay
 
-    const pw = Math.min(W * 0.84, 360), ph = 380, px = W / 2, py = H * 0.5;
+    // ---- panel container (440x560, centered) ------------------------------
+    const PW = 440, PH = 560, TOP = -PH / 2;                // TOP = panel-top in container space
+    const panel = this.add.container(W / 2, H / 2);
+
     const g = this.add.graphics();
-    g.fillStyle(0x000000, 0.16); g.fillRoundedRect(px - pw / 2, py - ph / 2 + 8, pw, ph, 28);
-    g.fillStyle(0xffffff, 1);    g.fillRoundedRect(px - pw / 2, py - ph / 2, pw, ph, 28);
-    g.fillStyle(0xFFF6E9, 1);    g.fillRoundedRect(px - pw / 2 + 6, py - ph / 2 + 6, pw - 12, ph - 12, 22);
+    g.fillStyle(0x000000, 0.16); g.fillRoundedRect(-PW / 2, -PH / 2 + 10, PW, PH, 30);
+    g.fillStyle(0xffffff, 1);    g.fillRoundedRect(-PW / 2, -PH / 2, PW, PH, 30);
+    g.fillStyle(0xFFF6E9, 1);    g.fillRoundedRect(-PW / 2 + 7, -PH / 2 + 7, PW - 14, PH - 14, 24);
+    panel.add(g);
 
-    const top = py - ph / 2;
-
-    // ---- title "게임 오버" (titleKo, darker rose) with a Back.Out entrance ----
-    const title = addStyledText(this, px, top + 50, TXT.GAME_OVER, FONT_STYLES.titleKo, {
+    // title "게임 오버" — 60px from panel top
+    panel.add(addStyledText(this, 0, TOP + 60, TXT.GAME_OVER, FONT_STYLES.titleKo, {
       style: { color: '#FF5C8A' },
-    });
-    title.setScale(0);
-    this.tweens.add({ targets: title, scale: 1, duration: 500, ease: 'Back.Out' });
+    }));
 
-    // ---- knocked-out cat --------------------------------------------------
+    // knocked-out cat — 150px from top, ~120x120, gentle wobble
     const catKey = texKey(this, CAT_TEX.gameover, 'catPlaceholder');
     if (hasTex(this, catKey)) {
-      const cat = this.add.image(px, top + 128, catKey);
-      cat.setScale(100 / cat.height);
-      this.tweens.add({ targets: cat, angle: { from: -3, to: 3 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+      const cat = this.add.image(0, TOP + 150, catKey);
+      cat.setScale(120 / cat.height);
+      panel.add(cat);
+      this.tweens.add({ targets: cat, angle: { from: -5, to: 5 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     }
 
-    // ---- score / depth / best --------------------------------------------
-    addStyledText(this, px, top + 190, TXT.SCORE, FONT_STYLES.captionKo, { alpha: 1 });
-    addStyledText(this, px, top + 224, '' + d.score, FONT_STYLES.scoreNumber);
-    addStyledText(this, px, top + 272, `${TXT.DEPTH} ${d.depth}${TXT.FLOOR_UNIT}`, FONT_STYLES.headingKo, {
-      style: { fontSize: '22px' },
-    });
-    addStyledText(this, px, top + 308, `${TXT.BEST}  ${d.best}`, FONT_STYLES.bestScore);
+    // score — label + number (~300px from top)
+    panel.add(addStyledText(this, 0, TOP + 250, TXT.SCORE, FONT_STYLES.captionKo, { alpha: 1 }));
+    panel.add(addStyledText(this, 0, TOP + 290, '' + d.score, FONT_STYLES.scoreNumber));
 
-    // ---- new-record banner (bestScore + bouncy 1.0->1.2->1.0 x3) ----------
+    // depth (~370px from top)
+    panel.add(addStyledText(this, 0, TOP + 360, `${TXT.DEPTH} ${d.depth}${TXT.FLOOR_UNIT}`,
+      FONT_STYLES.headingKo, { style: { fontSize: '24px' } }));
+
+    // best / new-record line (~420px from top)
+    const bestLabel = d.isRecord ? TXT.NEW_RECORD : `${TXT.BEST}  ${d.best}`;
+    panel.add(addStyledText(this, 0, TOP + 410, bestLabel, FONT_STYLES.bestScore, {
+      style: d.isRecord ? { color: '#f0a030', stroke: '#ffffff', strokeThickness: 5 } : {},
+    }));
+
+    // buttons side-by-side (~480px from top) — inside the panel
+    const retry = makeButton(this, -103, TOP + 490, TXT.REPLAY, {
+      width: 196, height: 58, fill: GAME_CONFIG.COLOR_FIRE, fontSize: 22,
+      onClick: () => this.leaveTo('Game'),
+    });
+    const menu = makeButton(this, 103, TOP + 490, TXT.HOME, {
+      width: 196, height: 58, fill: 0xb59b78, fontSize: 22,
+      onClick: () => this.leaveTo('Menu'),
+    });
+    panel.add(retry); panel.add(menu);
+
+    // ---- panel entrance: scale 0.5 -> 1.0, Back.Out, 400ms ----------------
+    panel.setScale(0.5);
+    this.tweens.add({ targets: panel, scale: 1, duration: 400, ease: 'Back.Out' });
+
+    // ---- new-record celebration: confetti + sparkle burst -----------------
     if (d.isRecord) {
-      const rec = addStyledText(this, px, top + 20, TXT.NEW_RECORD, FONT_STYLES.bestScore, {
-        style: { color: '#f0a030', stroke: '#ffffff', strokeThickness: 5 }, depth: 10,
-      });
-      this.tweens.add({
-        targets: rec, scaleX: 1.2, scaleY: 1.2, duration: 260,
-        yoyo: true, repeat: 2, ease: 'Sine.inOut',   // three 1.0->1.2->1.0 bounces
-      });
       const conf = this.add.particles(0, 0, TEX.P_CONF, {
         speedY: { min: 120, max: 300 }, speedX: { min: -80, max: 80 }, rotate: { start: 0, end: 360 },
         scale: { start: 1, end: 0.5 }, lifespan: 2000, gravityY: 130,
@@ -70,17 +87,16 @@ class GameOverScene extends Phaser.Scene {
         emitZone: { type: 'random', source: new Phaser.Geom.Rectangle(0, -12, W, 12) },
       }).setDepth(50);
       this.time.delayedCall(200, () => conf.explode(70));
-    }
 
-    // ---- buttons (labels styled buttonKo via makeButton) ------------------
-    makeButton(this, px, py + ph / 2 + 6, TXT.REPLAY, {
-      width: pw * 0.9, height: 60, fill: GAME_CONFIG.COLOR_FIRE,
-      onClick: () => this.leaveTo('Game'),
-    });
-    makeButton(this, px, py + ph / 2 + 76, TXT.HOME, {
-      width: pw * 0.9, height: 52, fill: 0xb59b78, fontSize: 22,
-      onClick: () => this.leaveTo('Menu'),
-    });
+      // sparkle burst around the best-score text (world position)
+      const sparkKey = texKey(this, 'vfxSparkle', TEX.P_STAR);
+      const spark = this.add.particles(0, 0, sparkKey, {
+        speed: { min: 60, max: 180 }, scale: { start: 0.5, end: 0 }, lifespan: 700,
+        tint: [0xffd166, 0xff9ec0, 0xffffff], emitting: false,
+        frame: sparkKey === 'vfxSparkle' ? [0, 2] : undefined,
+      }).setDepth(51);
+      this.time.delayedCall(450, () => spark.explode(20, W / 2, H / 2 + TOP + 410));
+    }
 
     this.cameras.main.fadeIn(240, 255, 229, 236);
   }

@@ -48,6 +48,13 @@ class GameScene extends Phaser.Scene {
     this._buildHUD();
     this._bindInput();
 
+    // fire-mode edge vignette (transparent centre -> orange edges, additive)
+    this.fireVignette = hasTex(this, 'fireVignette')
+      ? this.add.image(w / 2, h / 2, 'fireVignette')
+          .setBlendMode(Phaser.BlendModes.ADD).setDepth(90000).setVisible(false).setAlpha(0)
+      : null;
+    this._fireOn = false;
+
     this.cameras.main.fadeIn(240, 255, 229, 236);
     this._render();
     this._updateHUD();
@@ -83,6 +90,12 @@ class GameScene extends Phaser.Scene {
 
     // pose: falling while descending, idle while rising (fire pose is managed by Cat)
     if (!this.cat.isFireMode) this.cat.setState(this.cat.velocityY > 0 ? 'falling' : 'idle');
+
+    // fire-mode screen effect + attention pulse (toggle on state change)
+    if (this.cat.isFireMode !== this._fireOn) {
+      this._fireOn = this.cat.isFireMode;
+      this._toggleFireFx(this._fireOn);
+    }
 
     // Camera pins the cat at CAT_SCREEN_Y_RATIO while descending and freezes on
     // bounces (never scrolls back up).  Direct follow — an exponential lerp
@@ -214,43 +227,50 @@ class GameScene extends Phaser.Scene {
   }
 
   // ------------------------------------------------------------------ HUD
+  //  Laid out for the fixed 540x960 canvas.
   _buildHUD() {
-    const w = this.scale.width;
-
-    // score (top-right, Fredoka scoreNumber) — coin sprite if available, else 🪙
-    let scoreX = w - 14;
+    // score (top-right, right-aligned) + coin icon just to its left
     this.coinPrefix = '';
+    this.scoreText = addStyledText(this, 500, 24, '0',
+      FONT_STYLES.scoreNumber, { origin: { x: 1, y: 0 }, depth: 180 });
     if (hasTex(this, 'coin')) {
-      this.coinIcon = this.add.image(w - 12, 16, 'coin').setOrigin(1, 0).setDepth(180);
-      this.coinIcon.setScale(34 / this.coinIcon.height);
-      scoreX = w - 12 - 38;
+      this.coinIcon = this.add.image(0, 0, 'coin').setOrigin(1, 0.5).setDepth(180);
+      this.coinIcon.setScale(38 / this.coinIcon.height);
     } else {
       this.coinPrefix = '🪙 ';
+      this.scoreText.setText(this.coinPrefix + '0');
     }
-    this.scoreText = addStyledText(this, scoreX, 12, this.coinPrefix + '0',
-      FONT_STYLES.scoreNumber, { origin: { x: 1, y: 0 }, depth: 180 });
 
-    // depth (top-left, Do Hyeon hudCounter with 🏔️)
-    this.depthText = addStyledText(this, 14, 16, '', FONT_STYLES.hudCounter, {
+    // depth (top-left) — compact "🏔️ N"
+    this.depthText = addStyledText(this, 40, 30, '🏔️ 0', FONT_STYLES.hudCounter, {
       origin: { x: 0, y: 0 }, depth: 180, style: { stroke: '#ffffff', strokeThickness: 4 },
     });
 
-    // combo meter (top-center) + caption + fire label
+    // combo meter (top-center, x=270) with a "콤보" caption above it
     this.comboG = this.add.graphics().setDepth(180);
-    this.comboCaption = addStyledText(this, w / 2, 52, TXT.COMBO, FONT_STYLES.captionKo, { depth: 181 });
-    this.comboLabel = addStyledText(this, w / 2, 56, '', FONT_STYLES.hintKo, {
+    this.comboCaption = addStyledText(this, 270, 50, TXT.COMBO, FONT_STYLES.captionKo, { depth: 181 });
+    this.comboLabel = addStyledText(this, 270, 84, '', FONT_STYLES.hintKo, {
       depth: 182, style: { color: '#FF6B35', stroke: '#ffffff', strokeThickness: 4 },
     }).setVisible(false);
+    this._positionCoin();
+  }
+
+  _positionCoin() {
+    if (!this.coinIcon) return;
+    // sit the coin's right edge just left of the score number, vertically centred
+    const left = this.scoreText.x - this.scoreText.width;
+    this.coinIcon.setPosition(left - 8, this.scoreText.y + this.scoreText.height / 2);
   }
 
   _updateHUD() {
     if (this.score !== this._lastScore) {
       this.scoreText.setText(this.coinPrefix + this.score);
+      this._positionCoin();
       this._punchScore();
       this._lastScore = this.score;
     }
     if (this.depth !== this._lastDepth) {
-      this.depthText.setText(`🏔️ ${TXT.DEPTH} ${this.depth}${TXT.FLOOR_UNIT}`);
+      this.depthText.setText(`🏔️ ${this.depth}`);
       this._lastDepth = this.depth;
     }
     this._drawComboMeter();
@@ -266,32 +286,56 @@ class GameScene extends Phaser.Scene {
 
   _drawComboMeter() {
     const g = this.comboG;
-    const w = this.scale.width;
-    const cells = GAME_CONFIG.COMBO_FOR_FIRE_MODE;
-    const cw = 34, gap = 6, y = 34, hgt = 12;
-    const totalW = cells * cw + (cells - 1) * gap;
-    const x0 = w / 2 - totalW / 2;
+    const cx = 270;
     g.clear();
 
     if (this.cat.isFireMode) {
+      // fire-mode countdown RING with 🔥 in the centre (see _toggleFireFx pulse)
       const frac = Phaser.Math.Clamp(this.cat.fireModeTimer / GAME_CONFIG.FIRE_MODE_DURATION, 0, 1);
-      g.fillStyle(0x000000, 0.12); g.fillRoundedRect(x0, y, totalW, hgt, 6);
-      g.fillStyle(GAME_CONFIG.COLOR_FIRE, 1); g.fillRoundedRect(x0, y, totalW * frac, hgt, 6);
-      this.comboLabel.setText(TXT.FIRE).setVisible(true);
+      const ry = 84, r = 26;
+      g.lineStyle(7, 0x000000, 0.15); g.strokeCircle(cx, ry, r);
+      g.lineStyle(7, GAME_CONFIG.COLOR_FIRE, 1);
+      g.beginPath();
+      g.arc(cx, ry, r, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2, false);
+      g.strokePath();
       this.comboCaption.setVisible(false);
+      this.comboLabel.setText('🔥').setVisible(true);
       return;
     }
 
+    // normal 4-segment combo bar
     this.comboLabel.setVisible(false);
     this.comboCaption.setVisible(true);
+    const cells = GAME_CONFIG.COMBO_FOR_FIRE_MODE;
+    const cw = 44, gap = 6, hgt = 18, y = 68;
+    const totalW = cells * cw + (cells - 1) * gap;
+    const x0 = cx - totalW / 2;
     const filled = Math.min(this.cat.combo, cells);
     for (let i = 0; i < cells; i++) {
       const x = x0 + i * (cw + gap);
-      g.fillStyle(0x000000, 0.10); g.fillRoundedRect(x, y, cw, hgt, 5);
+      g.fillStyle(0x000000, 0.10); g.fillRoundedRect(x, y, cw, hgt, 6);
       if (i < filled) {
         g.fillStyle(i === cells - 1 ? GAME_CONFIG.COLOR_FIRE : 0xff9ec0, 1);
-        g.fillRoundedRect(x, y, cw, hgt, 5);
+        g.fillRoundedRect(x, y, cw, hgt, 6);
       }
+    }
+  }
+
+  // Enter/exit fire mode: edge vignette + pulsing 🔥 indicator.
+  _toggleFireFx(on) {
+    if (this.fireVignette) {
+      this.tweens.killTweensOf(this.fireVignette);
+      if (on) {
+        this.fireVignette.setVisible(true).setAlpha(0.25);
+        this.tweens.add({ targets: this.fireVignette, alpha: 0.5, duration: 480, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+      } else {
+        this.fireVignette.setVisible(false).setAlpha(0);
+      }
+    }
+    this.tweens.killTweensOf(this.comboLabel);
+    this.comboLabel.setScale(1);
+    if (on) {
+      this.tweens.add({ targets: this.comboLabel, scaleX: 1.3, scaleY: 1.3, duration: 420, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     }
   }
 

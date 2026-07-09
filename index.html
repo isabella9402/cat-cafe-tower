@@ -17,16 +17,52 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 100%; height: 100%; overflow: hidden;
-      background: var(--bg);
       font-family: "Jua", "Malgun Gothic", sans-serif;
       -webkit-tap-highlight-color: transparent;
       touch-action: none; user-select: none;
     }
-    #game { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+    /* Soft sky gradient behind the letterboxed canvas — replaces the solid
+       pink side-bars with a themed backdrop. */
+    body {
+      background: linear-gradient(135deg, #FFB6C1 0%, #FFC9DE 40%, #FFE5EC 100%);
+    }
+    /* Subtle radial vignette for depth. */
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background: radial-gradient(ellipse at center,
+                  rgba(255,255,255,0) 40%, rgba(120,60,80,0.20) 100%);
+    }
+    #game {
+      position: relative; z-index: 1;
+      width: 100vw; height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+    }
     canvas { display: block; }
+    /* On wide/tall screens the canvas floats like a phone screen. */
+    #game canvas {
+      box-shadow: 0 20px 60px rgba(255,105,157,0.30), 0 8px 25px rgba(255,105,157,0.20);
+      border-radius: 14px;
+    }
+    /* True portrait phones (narrower than 9:16): fill edge-to-edge, no frame. */
+    @media (max-aspect-ratio: 9/16) {
+      #game canvas { box-shadow: none; border-radius: 0; }
+    }
     #loading {
-      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-      background: var(--bg); color: #5b3a29; font-size: 22px; z-index: 10;
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #FFB6C1 0%, #FFE5EC 100%);
+      color: #5b3a29; font-size: 22px;
+    }
+    /* Rotate-to-portrait prompt on small landscape screens. */
+    @media (orientation: landscape) and (max-width: 900px) {
+      #game::after {
+        content: '📱 세로로 돌려주세요\A Please rotate to portrait';
+        white-space: pre; text-align: center;
+        position: fixed; inset: 0; z-index: 999;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(255,229,236,0.96);
+        font-family: "Do Hyeon", sans-serif; font-size: 24px; color: #5b3a29;
+      }
     }
   </style>
 </head>

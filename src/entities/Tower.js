@@ -1,17 +1,23 @@
 /* =========================================================================
  *  Tower — the rotating stack of level rings for the top-down Helix descent.
  *
- *  A "level" is a full circle at worldY = depth * LEVEL_HEIGHT, divided into
- *  segments (arcs).  One arc is the GAP; the rest are solid wedges of type
- *  SAFE / DANGER / BOUNCE.
+ *  A "level" is a full 360° ring at worldY = depth * LEVEL_HEIGHT, divided into
+ *  segments (arcs).  One arc is the GAP (drawn as nothing — the cat falls
+ *  through); the rest are solid wedges of type SAFE / DANGER / BOUNCE.  The
+ *  wedges of a level always tile the circle exactly: gap + N equal solid wedges
+ *  sum to 2π, with no overlaps and no angular holes (see generateLevel).
  *
- *  RENDERING: the platform art (tower_normal / tower_danger / tower_cushion) are
- *  full top-down disc PNGs.  For each level we draw, per type, ONE disc sprite
- *  masked (geometry mask) to the union of that type's non-broken wedges — so a
- *  mixed level composites into a single seamless disc with coloured slices, and
- *  the gap is simply where no wedge is drawn.  When a texture is missing we fall
- *  back to the original Graphics annular-sector fill.  Collision logic is
- *  texture-independent, so gameplay is identical either way.
+ *  RENDERING: every wedge of every level is drawn programmatically as a solid
+ *  annular sector (donut arc) on a single Graphics layer, so every wedge of a
+ *  level shares the exact same inner/outer radius and the ring reads as one
+ *  clean donut with a single visible gap.  (An earlier build composited three
+ *  separate full-disc PNGs per level via geometry masks; because the PNGs had
+ *  different internal ring/hole radii, a level's danger wedges bulged past its
+ *  safe ring and looked like detached slices — hence the flat-fill rewrite.)
+ *  The tower_*.png discs are intentionally no longer used for the ring; add
+ *  texture/pattern back later once the geometry is confirmed correct.
+ *
+ *  Collision (getSegmentAt) is geometry-only and unchanged by rendering.
  * ========================================================================= */
 
 class Tower {
@@ -21,25 +27,19 @@ class Tower {
     this.rotation = 0;       // radians
     this.rotationSpeed = 0;
 
-    // which platform types have real textures
-    this.useTex = {
-      [SEGMENT_TYPE.SAFE]:   hasTex(scene, PLATFORM_TEX[SEGMENT_TYPE.SAFE]),
-      [SEGMENT_TYPE.DANGER]: hasTex(scene, PLATFORM_TEX[SEGMENT_TYPE.DANGER]),
-      [SEGMENT_TYPE.BOUNCE]: hasTex(scene, PLATFORM_TEX[SEGMENT_TYPE.BOUNCE]),
-    };
-    this.hasPlatformTex = this.useTex.safe || this.useTex.danger || this.useTex.bounce;
+    // We draw the ring with Graphics, not platform textures. GameScene reads
+    // this flag to decide whether to draw the central post itself (it must).
+    this.hasPlatformTex = false;
 
     // dedicated render layers (Tower owns them)
-    this.fallbackG = scene.add.graphics().setDepth(5);      // arc fallback fills
-    this.treatG = scene.add.graphics().setDepth(20000);     // fish treats (above discs)
-    this._masks = new Set();                                // track for cleanup
+    this.ringG = scene.add.graphics().setDepth(5);       // solid wedge fills
+    this.treatG = scene.add.graphics().setDepth(20000);  // fish treats (above rings)
 
     scene.events.once('shutdown', () => this.destroy());
     scene.events.once('destroy', () => this.destroy());
   }
 
   reset() {
-    Object.values(this.levels).forEach((lvl) => this._disposeLevel(lvl));
     this.levels = {};
     this.rotation = 0;
     this.rotationSpeed = 0;
@@ -63,18 +63,22 @@ class Tower {
 
     for (const key of Object.keys(this.levels)) {
       const d = +key;
-      if (d < lo - 1 || d > hi + 1) { this._disposeLevel(this.levels[d]); delete this.levels[d]; }
+      if (d < lo - 1 || d > hi + 1) delete this.levels[d];
     }
     for (let d = lo; d <= hi; d++) {
       if (!this.levels[d]) this.levels[d] = this.generateLevel(d);
     }
   }
 
+  // --- level generation --------------------------------------------------
+  //  Builds a COMPLETE ring: one gap arc + SOLID_SEGMENTS equal wedges that
+  //  together cover exactly 2π. Danger wedges are placed at random slots; the
+  //  gap always occupies real angular space, it is simply never drawn.
   generateLevel(depth) {
     const tier = getDifficultyTier(depth);
     const gapSpan = Phaser.Math.DegToRad(tier.gapWidth);
     const gapCenter = Math.random() * TWO_PI;
-    const gapEnd = gapCenter + gapSpan / 2;
+    const gapEnd = gapCenter + gapSpan / 2;   // solid wedges start here, sweep round
 
     const n = GAME_CONFIG.SOLID_SEGMENTS;
     const solidSpan = TWO_PI - gapSpan;
@@ -82,7 +86,7 @@ class Tower {
 
     let dangerCount = randomInt(tier.dangerCount[0], tier.dangerCount[1]);
     if (depth < GAME_CONFIG.SAFE_INTRO_LEVELS) dangerCount = 0;
-    dangerCount = Math.min(dangerCount, n - 1);
+    dangerCount = Math.min(dangerCount, n - 1);   // keep >=1 landable wedge
     const dangerSet = pickDistinct(n, dangerCount);
 
     const isBounceLevel =
@@ -109,10 +113,12 @@ class Tower {
       if (safeSegs.length) safeSegs[randomInt(0, safeSegs.length - 1)].hasTreat = true;
     }
 
-    return { depth, y: depth * GAME_CONFIG.LEVEL_HEIGHT, segments, isBounceLevel, pieces: {} };
+    return { depth, y: depth * GAME_CONFIG.LEVEL_HEIGHT, segments, isBounceLevel };
   }
 
-  // ---- collision (texture-independent) ----------------------------------
+  // ---- collision (geometry only) ----------------------------------------
+  //  The cat is fixed at world angle FRONT_ANGLE; the tower spins under it, so
+  //  the cat's angle in the tower's LOCAL frame is (FRONT_ANGLE - rotation).
   getSegmentAt(depth) {
     const level = this.levels[depth];
     if (!level) return null;
@@ -121,7 +127,7 @@ class Tower {
       if (seg.broken) continue;
       if (angleInArc(frontLocal, seg.startAngle, seg.endAngle)) return seg;
     }
-    return null; // gap
+    return null; // gap (or all wedges broken) — fall through
   }
 
   destroySegment(segment) { if (segment) segment.broken = true; }
@@ -131,42 +137,21 @@ class Tower {
     if (level) level.segments.forEach((s) => { s.broken = true; });
   }
 
-  // ---- piece / mask lifecycle -------------------------------------------
-  _ensurePiece(level, type) {
-    let piece = level.pieces[type];
-    if (piece) return piece;
-    const sprite = this.scene.add.image(0, 0, PLATFORM_TEX[type]);
-    const maskG = this.scene.make.graphics({ add: false });
-    sprite.setMask(maskG.createGeometryMask());
-    piece = { sprite, maskG };
-    level.pieces[type] = piece;
-    this._masks.add(maskG);
-    return piece;
-  }
-
-  _disposeLevel(level) {
-    if (!level || !level.pieces) return;
-    for (const type of Object.keys(level.pieces)) {
-      const p = level.pieces[type];
-      if (p.sprite) p.sprite.destroy();
-      if (p.maskG) { this._masks.delete(p.maskG); p.maskG.destroy(); }
-    }
-    level.pieces = {};
-  }
-
   destroy() {
-    Object.values(this.levels).forEach((lvl) => this._disposeLevel(lvl));
     this.levels = {};
-    this._masks.forEach((m) => m.destroy());
-    this._masks.clear();
-    if (this.fallbackG) { this.fallbackG.destroy(); this.fallbackG = null; }
+    if (this.ringG) { this.ringG.destroy(); this.ringG = null; }
     if (this.treatG) { this.treatG.destroy(); this.treatG = null; }
   }
 
   // ---- render ------------------------------------------------------------
+  //  Each level is a complete donut ring: draw every non-broken, non-gap wedge
+  //  as a solid annular sector. Pseudo-3D: levels below the cat shrink and fade
+  //  slightly for a "looking down the tube" feel. Deepest first so nearer rings
+  //  paint over farther ones.
   render(camY, ballY) {
-    if (!this.fallbackG) return;
-    this.fallbackG.clear();
+    if (!this.ringG) return;
+    const g = this.ringG;
+    g.clear();
     this.treatG.clear();
 
     const cx = GAME_CONFIG.TOWER_CENTER_X;
@@ -174,69 +159,44 @@ class Tower {
     const R = GAME_CONFIG.TOWER_RADIUS;
     const rIn = GAME_CONFIG.POST_RADIUS;
     const span = GAME_CONFIG.LEVELS_AHEAD * GAME_CONFIG.LEVEL_HEIGHT;
-    const TYPES = [SEGMENT_TYPE.SAFE, SEGMENT_TYPE.BOUNCE, SEGMENT_TYPE.DANGER];
 
-    // deepest first so nearer levels (set via depth) still composite correctly
     const depths = Object.keys(this.levels).map(Number).sort((a, b) => b - a);
 
     for (const depth of depths) {
       const level = this.levels[depth];
       const cy = (level.y - camY) - GAME_CONFIG.RIM_OFFSET;
-      const offscreen = cy < -R * 1.9 || cy > H + R * 1.9;
-
-      if (offscreen) { this._hideLevel(level); continue; }
+      if (cy < -R * 1.9 || cy > H + R * 1.9) continue;   // offscreen
 
       const rel = (level.y - ballY) / span;
       const scale = Phaser.Math.Clamp(1 - rel * 0.55, 0.4, 1.12);
       const alpha = Phaser.Math.Clamp(1 - Math.max(rel, 0) * 0.85, 0.14, 1);
       const rOut = R * scale;
+      const rInner = rIn * scale;
 
-      for (const type of TYPES) {
-        const wedges = level.segments.filter((s) => s.type === type && !s.broken);
-        if (!wedges.length) { this._hidePiece(level, type); continue; }
+      for (const seg of level.segments) {
+        if (seg.broken || seg.type === SEGMENT_TYPE.GAP) continue;  // gap = draw nothing
 
-        if (this.useTex[type]) {
-          this._drawTexturedWedges(level, type, wedges, cx, cy, rOut, alpha);
-        } else {
-          this._drawFallbackWedges(type, wedges, cx, cy, rIn * scale, rOut, alpha, depth);
+        let color = SEGMENT_COLOR[seg.type];
+        if (seg.type === SEGMENT_TYPE.SAFE && depth % 2 === 1) {
+          color = GAME_CONFIG.COLOR_PLATFORM_SAFE_ALT;  // alternate shade for readability
         }
+        const a0 = seg.startAngle + this.rotation;
+        const a1 = seg.endAngle + this.rotation;
+
+        // filled wedge
+        g.fillStyle(color, alpha);
+        fillArcRing(g, cx, cy, rInner, rOut, a0, a1);
+
+        // soft light rim so adjacent wedges / stacked rings stay legible
+        g.lineStyle(2, 0xffffff, 0.5 * alpha);
+        g.beginPath();
+        g.arc(cx, cy, rOut, a0, a1, false);
+        g.arc(cx, cy, rInner, a1, a0, true);
+        g.closePath();
+        g.strokePath();
       }
 
-      // fish treats (Graphics — no transparent fish sprite available)
-      this._drawTreats(level, cx, cy, rIn * scale, rOut, alpha);
-    }
-  }
-
-  _drawTexturedWedges(level, type, wedges, cx, cy, rOut, alpha) {
-    const piece = this._ensurePiece(level, type);
-    const sp = piece.sprite;
-    const s = (rOut * 2) / sp.width;          // scale disc so its diameter ≈ 2*rOut
-    sp.setVisible(true).setPosition(cx, cy).setScale(s)
-      .setRotation(this.rotation).setAlpha(alpha)
-      .setDepth(10000 - level.depth);         // nearer (smaller depth) on top
-
-    const g = piece.maskG;
-    g.clear();
-    g.fillStyle(0xffffff, 1);
-    const maskR = rOut * 1.18;                 // a bit beyond the rim (extra is transparent)
-    for (const w of wedges) {
-      g.slice(cx, cy, maskR, w.startAngle + this.rotation, w.endAngle + this.rotation, false);
-      g.fillPath();
-    }
-  }
-
-  _drawFallbackWedges(type, wedges, cx, cy, rInner, rOut, alpha, depth) {
-    const g = this.fallbackG;
-    let color = SEGMENT_COLOR[type];
-    if (type === SEGMENT_TYPE.SAFE && depth % 2 === 1) color = GAME_CONFIG.COLOR_PLATFORM_SAFE_ALT;
-    for (const w of wedges) {
-      const a0 = w.startAngle + this.rotation;
-      const a1 = w.endAngle + this.rotation;
-      g.fillStyle(color, alpha);
-      fillArcRing(g, cx, cy, rInner, rOut, a0, a1);
-      g.lineStyle(2, 0x000000, 0.06 * alpha);
-      fillArcRing(g, cx, cy, rInner, rOut, a0, a1);
-      g.strokePath();
+      this._drawTreats(level, cx, cy, rInner, rOut, alpha);
     }
   }
 
@@ -256,19 +216,6 @@ class Tower {
         tx - 16 * scale, ty - 7 * scale,
         tx - 16 * scale, ty + 7 * scale
       );
-    }
-  }
-
-  _hidePiece(level, type) {
-    const p = level.pieces && level.pieces[type];
-    if (p && p.sprite) p.sprite.setVisible(false);
-  }
-
-  _hideLevel(level) {
-    if (!level.pieces) return;
-    for (const type of Object.keys(level.pieces)) {
-      const p = level.pieces[type];
-      if (p.sprite) p.sprite.setVisible(false);
     }
   }
 }

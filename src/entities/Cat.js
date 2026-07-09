@@ -14,6 +14,7 @@ class Cat {
     this.x = x;                 // fixed at tower centre (screen)
     this.y = y;                 // WORLD y (grows downward)
     this.velocityY = 0;
+    this.trailCooldown = 0;     // throttle for the falling/fire trail dots
 
     this.isFireMode = false;
     this.fireModeTimer = 0;
@@ -94,12 +95,28 @@ class Cat {
       );
     }
     this.y += this.velocityY * dt;
-    if (this.aura && this.aura.visible) this.aura.rotation += dt * 1.2; // slow spin
+    if (this.aura && this.aura.visible) this.aura.rotation += dt * 3; // spin faster in fire mode
+    this._emitTrail(dt);
+  }
+
+  // Ball trail dots when diving fast or in fire mode (SPEC 8).
+  _emitTrail(dt) {
+    if (!(this.velocityY > 400 || this.isFireMode)) return;
+    this.trailCooldown -= dt;
+    if (this.trailCooldown > 0) return;
+    this.trailCooldown = 0.03;
+    const dot = this.scene.add.graphics().setDepth(80);
+    dot.fillStyle(this.isFireMode ? GAME_CONFIG.COLOR_FIRE : 0xFFB6C1, 0.6);
+    dot.fillCircle(this.sprite.x, this.sprite.y, 8);
+    this.scene.tweens.add({
+      targets: dot, alpha: 0, scale: 0.2, duration: 400,
+      onComplete: () => dot.destroy(),
+    });
   }
 
   // Bounce up off a safe/booster platform.  Resets the combo (canonical).
-  bounce(force) {
-    this.velocityY = -force;
+  bounce(isBouncePad) {
+    this.velocityY = -GAME_CONFIG.BOUNCE_FORCE * (isBouncePad ? GAME_CONFIG.BOUNCE_BOOST_MULT : 1);
     this.combo = 0;
     this.squash();
   }
@@ -117,6 +134,7 @@ class Cat {
     this.fireModeTimer = GAME_CONFIG.FIRE_MODE_DURATION;
     this.setState('fire');
     if (this.aura) this.aura.setVisible(true).setAlpha(0.9);
+    this.scene.events.emit('fireModeStart');
   }
 
   exitFireMode() {
@@ -125,6 +143,7 @@ class Cat {
     this.combo = 0;                 // combo resets when fire ends
     this.setState(this.velocityY > 0 ? 'falling' : 'idle');
     if (this.aura) this.aura.setVisible(false);
+    this.scene.events.emit('fireModeEnd');
   }
 
   // Combo score multiplier (applied to gap score).

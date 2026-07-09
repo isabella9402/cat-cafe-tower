@@ -2,220 +2,383 @@
  *  Tower — the rotating stack of level rings for the top-down Helix descent.
  *
  *  A "level" is a full 360° ring at worldY = depth * LEVEL_HEIGHT, divided into
- *  segments (arcs).  One arc is the GAP (drawn as nothing — the cat falls
- *  through); the rest are solid wedges of type SAFE / DANGER / BOUNCE.  The
- *  wedges of a level always tile the circle exactly: gap + N equal solid wedges
- *  sum to 2π, with no overlaps and no angular holes (see generateLevel).
+ *  segments that tile the circle exactly (applyCut guarantees 2π coverage with
+ *  no overlaps or holes). One or more arcs are the GAP (type 'gap' — real
+ *  angular space that is simply never drawn); the rest are SAFE / DANGER /
+ *  BOUNCE wedges.
  *
- *  RENDERING: every wedge of every level is drawn programmatically as a solid
- *  annular sector (donut arc) on a single Graphics layer, so every wedge of a
- *  level shares the exact same inner/outer radius and the ring reads as one
- *  clean donut with a single visible gap.  (An earlier build composited three
- *  separate full-disc PNGs per level via geometry masks; because the PNGs had
- *  different internal ring/hole radii, a level's danger wedges bulged past its
- *  safe ring and looked like detached slices — hence the flat-fill rewrite.)
- *  The tower_*.png discs are intentionally no longer used for the ring; add
- *  texture/pattern back later once the geometry is confirmed correct.
- *
- *  Collision (getSegmentAt) is geometry-only and unchanged by rendering.
+ *  RENDERING (canonical Helix look): each level owns a Phaser container. Per
+ *  platform type we add ONE full-ring PNG (tower_normal / tower_danger /
+ *  tower_cushion) clipped by a geometry mask built from the union of that
+ *  type's wedges. The mask is an annular sector at exactly innerRadius..
+ *  outerRadius, so all three textures are clipped to the SAME ring and align
+ *  (an earlier build masked beyond the rim, which let the danger disc bulge
+ *  past the safe ring). When a texture is missing we fall back to a solid
+ *  Graphics fill of the same annular sector. Collision is geometry-only.
  * ========================================================================= */
 
 class Tower {
   constructor(scene) {
     this.scene = scene;
-    this.levels = {};        // depth -> level
-    this.rotation = 0;       // radians
-    this.rotationSpeed = 0;
+    this.levels = [];                 // array of level objects
+    this.rotation = 0;                // radians
+    this._camY = 0;                   // last camY passed to render (for burst placement)
 
-    // We draw the ring with Graphics, not platform textures. GameScene reads
-    // this flag to decide whether to draw the central post itself (it must).
-    this.hasPlatformTex = false;
+    this.centerX = GAME_CONFIG.TOWER_CENTER_X;
+    this.outerRadius = GAME_CONFIG.TOWER_RADIUS;
+    this.innerRadius = GAME_CONFIG.POST_RADIUS;
 
-    // dedicated render layers (Tower owns them)
-    this.ringG = scene.add.graphics().setDepth(5);       // solid wedge fills
-    this.treatG = scene.add.graphics().setDepth(20000);  // fish treats (above rings)
+    // central scratching post (behind the rings; shows through the holes/gaps)
+    this.postGraphics = scene.add.graphics().setDepth(-150);
 
     scene.events.once('shutdown', () => this.destroy());
     scene.events.once('destroy', () => this.destroy());
   }
 
   reset() {
-    this.levels = {};
+    this.levels.forEach((l) => this._disposeLevel(l));
+    this.levels = [];
     this.rotation = 0;
-    this.rotationSpeed = 0;
   }
 
+  // Instant, inertia-free rotation (canonical Helix: stops the moment the drag
+  // ends). Keep the angle wrapped to [0, 2π).
   rotate(deltaRadians) {
-    this.rotation += deltaRadians;
-    this.rotationSpeed = deltaRadians;
+    this.rotation = ((this.rotation + deltaRadians) % TWO_PI + TWO_PI) % TWO_PI;
   }
 
-  update(dt, catY, dragging) {
-    if (!dragging) {
-      this.rotation += this.rotationSpeed;
-      this.rotationSpeed *= GAME_CONFIG.ROTATION_FRICTION;
-      if (Math.abs(this.rotationSpeed) < 1e-4) this.rotationSpeed = 0;
-    }
+  // Recycle passed levels, extend the tower ahead of the cat.
+  update(dt, catY) {
+    const cull = catY - GAME_CONFIG.LEVELS_BEHIND * GAME_CONFIG.LEVEL_HEIGHT;
+    this.levels = this.levels.filter((l) => {
+      if (l.y < cull) { this._disposeLevel(l); return false; }
+      return true;
+    });
 
-    const centerDepth = Math.round(catY / GAME_CONFIG.LEVEL_HEIGHT);
-    const lo = Math.max(1, centerDepth - GAME_CONFIG.LEVELS_BEHIND);
-    const hi = centerDepth + GAME_CONFIG.LEVELS_AHEAD;
-
-    for (const key of Object.keys(this.levels)) {
-      const d = +key;
-      if (d < lo - 1 || d > hi + 1) delete this.levels[d];
-    }
-    for (let d = lo; d <= hi; d++) {
-      if (!this.levels[d]) this.levels[d] = this.generateLevel(d);
+    const targetY = catY + GAME_CONFIG.LEVELS_AHEAD * GAME_CONFIG.LEVEL_HEIGHT;
+    let nextDepth = this.levels.length ? Math.max(...this.levels.map((l) => l.depth)) + 1 : 1;
+    let deepestY = this.levels.length ? Math.max(...this.levels.map((l) => l.y)) : -Infinity;
+    while (deepestY < targetY) {
+      const lvl = this.generateLevel(nextDepth);
+      this.levels.push(lvl);
+      deepestY = lvl.y;
+      nextDepth++;
     }
   }
 
-  // --- level generation --------------------------------------------------
-  //  Builds a COMPLETE ring: one gap arc + SOLID_SEGMENTS equal wedges that
-  //  together cover exactly 2π. Danger wedges are placed at random slots; the
-  //  gap always occupies real angular space, it is simply never drawn.
+  // --- level generation: guaranteed full-circle coverage -----------------
   generateLevel(depth) {
     const tier = getDifficultyTier(depth);
-    const gapSpan = Phaser.Math.DegToRad(tier.gapWidth);
-    const gapCenter = Math.random() * TWO_PI;
-    const gapEnd = gapCenter + gapSpan / 2;   // solid wedges start here, sweep round
-
-    const n = GAME_CONFIG.SOLID_SEGMENTS;
-    const solidSpan = TWO_PI - gapSpan;
-    const each = solidSpan / n;
-
+    const gapWidthRad = Phaser.Math.DegToRad(tier.gapWidth);
     let dangerCount = randomInt(tier.dangerCount[0], tier.dangerCount[1]);
-    if (depth < GAME_CONFIG.SAFE_INTRO_LEVELS) dangerCount = 0;
-    dangerCount = Math.min(dangerCount, n - 1);   // keep >=1 landable wedge
-    const dangerSet = pickDistinct(n, dangerCount);
+    if (depth < GAME_CONFIG.SAFE_INTRO_LEVELS) dangerCount = 0;   // fair intro
+    const dangerWidthRad = Phaser.Math.DegToRad(30);
+
+    // start as a single full-circle safe segment, then cut pieces out of it
+    let segments = [{ startAngle: 0, endAngle: TWO_PI, type: SEGMENT_TYPE.SAFE }];
+
+    const gapStart = Math.random() * TWO_PI;
+    segments = this.applyCut(segments, gapStart, gapStart + gapWidthRad, SEGMENT_TYPE.GAP);
+
+    for (let i = 0; i < dangerCount; i++) {
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const dStart = Math.random() * TWO_PI;
+        const dEnd = dStart + dangerWidthRad;
+        if (this.isAllType(segments, dStart, dEnd, SEGMENT_TYPE.SAFE)) {
+          segments = this.applyCut(segments, dStart, dEnd, SEGMENT_TYPE.DANGER);
+          break;
+        }
+      }
+    }
 
     const isBounceLevel =
       depth >= GAME_CONFIG.BOUNCE_BOOSTER_MIN_DEPTH &&
       Math.random() < GAME_CONFIG.BOUNCE_BOOSTER_CHANCE;
-
-    const segments = [];
-    for (let k = 0; k < n; k++) {
-      const startAngle = gapEnd + k * each;
-      const endAngle = startAngle + each;
-      let type;
-      if (dangerSet.has(k)) type = SEGMENT_TYPE.DANGER;
-      else type = isBounceLevel ? SEGMENT_TYPE.BOUNCE : SEGMENT_TYPE.SAFE;
-      segments.push({
-        startAngle: normalizeAngle(startAngle),
-        endAngle: normalizeAngle(endAngle),
-        type, hasTreat: false, broken: false,
-      });
+    if (isBounceLevel) {
+      segments.forEach((s) => { if (s.type === SEGMENT_TYPE.SAFE) s.type = SEGMENT_TYPE.BOUNCE; });
     }
 
     if (depth >= GAME_CONFIG.FISH_TREAT_MIN_DEPTH &&
         Math.random() < GAME_CONFIG.FISH_TREAT_CHANCE) {
-      const safeSegs = segments.filter((s) => s.type !== SEGMENT_TYPE.DANGER);
-      if (safeSegs.length) safeSegs[randomInt(0, safeSegs.length - 1)].hasTreat = true;
+      const safes = segments.filter((s) => s.type === SEGMENT_TYPE.SAFE || s.type === SEGMENT_TYPE.BOUNCE);
+      if (safes.length) safes[randomInt(0, safes.length - 1)].hasTreat = true;
     }
 
-    return { depth, y: depth * GAME_CONFIG.LEVEL_HEIGHT, segments, isBounceLevel };
+    const level = {
+      depth, y: depth * GAME_CONFIG.LEVEL_HEIGHT,
+      segments, isBounceLevel,
+      container: null, masks: [], treatSprites: [],
+    };
+    this.buildLevelVisuals(level);
+    return level;
+  }
+
+  // Replace the type of the arc [cutStart, cutEnd] wherever it overlaps
+  // existing segments, splitting them as needed. Handles the 0/2π seam by
+  // recursing on the two halves.
+  applyCut(segments, cutStart, cutEnd, newType) {
+    cutStart = normalizeAngle(cutStart);
+    cutEnd = normalizeAngle(cutEnd);
+    // A wrapped cut (crosses the 0/2π seam) becomes two non-wrapping cuts.
+    // NOTE: normalizeAngle(2π) === 0, so we must NOT re-run applyCut with 2π as
+    // an argument (it would wrap again forever) — cut the raw ranges directly.
+    if (cutStart > cutEnd) {
+      const r = this._cutRange(segments, cutStart, TWO_PI, newType);
+      return this._cutRange(r, 0, cutEnd, newType);
+    }
+    return this._cutRange(segments, cutStart, cutEnd, newType);
+  }
+
+  // Cut a single non-wrapping range [cutStart, cutEnd] (0 <= start <= end <= 2π).
+  _cutRange(segments, cutStart, cutEnd, newType) {
+    if (cutEnd - cutStart < 1e-9) return segments;
+    const result = [];
+    for (const seg of segments) {
+      if (seg.endAngle <= cutStart || seg.startAngle >= cutEnd) { result.push(seg); continue; }
+      if (seg.startAngle >= cutStart && seg.endAngle <= cutEnd) {
+        result.push({ startAngle: seg.startAngle, endAngle: seg.endAngle, type: newType, hasTreat: seg.hasTreat });
+        continue;
+      }
+      if (seg.startAngle < cutStart) {
+        result.push({ startAngle: seg.startAngle, endAngle: cutStart, type: seg.type, hasTreat: seg.hasTreat });
+      }
+      result.push({
+        startAngle: Math.max(seg.startAngle, cutStart),
+        endAngle: Math.min(seg.endAngle, cutEnd),
+        type: newType,
+      });
+      if (seg.endAngle > cutEnd) {
+        result.push({ startAngle: cutEnd, endAngle: seg.endAngle, type: seg.type, hasTreat: seg.hasTreat });
+      }
+    }
+    return result;
+  }
+
+  // True if the whole arc [testStart, testEnd] lies within segments of the
+  // required type (used to avoid dropping a danger on top of the gap).
+  isAllType(segments, testStart, testEnd, requiredType) {
+    testStart = normalizeAngle(testStart);
+    testEnd = normalizeAngle(testEnd);
+    if (testStart > testEnd) return false;   // skip seam-crossing candidates
+    for (const seg of segments) {
+      if (seg.endAngle <= testStart || seg.startAngle >= testEnd) continue;
+      if (seg.type !== requiredType) return false;
+    }
+    return true;
+  }
+
+  // --- visuals: one container per level, sprite+mask per type ------------
+  buildLevelVisuals(level) {
+    const scene = this.scene;
+    const container = scene.add.container(0, 0);
+    level.masks = [];
+    level.treatSprites = [];
+
+    const byType = {};
+    for (const seg of level.segments) {
+      if (seg.type === SEGMENT_TYPE.GAP) continue;
+      (byType[seg.type] || (byType[seg.type] = [])).push(seg);
+    }
+
+    for (const type of Object.keys(byType)) {
+      const segs = byType[type];
+      const key = PLATFORM_TEX[type];
+
+      if (hasTex(scene, key)) {
+        const sprite = scene.add.image(0, 0, key);
+        sprite.setDisplaySize(this.outerRadius * 2.3, this.outerRadius * 2.3);
+        const mask = scene.add.graphics();
+        mask.fillStyle(0xffffff, 1);
+        for (const s of segs) this._fillRingArc(mask, s.startAngle, s.endAngle);
+        mask.setVisible(false);
+        sprite.setMask(mask.createGeometryMask());
+        container.add(sprite);
+        level.masks.push(mask);
+      } else {
+        const g = scene.add.graphics();
+        let color = SEGMENT_COLOR[type];
+        if (type === SEGMENT_TYPE.SAFE && level.depth % 2 === 1) color = GAME_CONFIG.COLOR_PLATFORM_SAFE_ALT;
+        g.fillStyle(color, 1);
+        for (const s of segs) this._fillRingArc(g, s.startAngle, s.endAngle);
+        container.add(g);
+      }
+    }
+
+    // treats (fish) — bob gently; ride the container's rotation/scale
+    for (const seg of level.segments) {
+      if (!seg.hasTreat) continue;
+      const midA = (seg.startAngle + seg.endAngle) / 2;
+      const r = (this.outerRadius + this.innerRadius) / 2;
+      const tx = Math.cos(midA) * r, ty = Math.sin(midA) * r;
+      let treat;
+      if (hasTex(scene, 'fishTreat')) {
+        treat = scene.add.image(tx, ty, 'fishTreat').setDisplaySize(38, 38);
+      } else {
+        treat = scene.add.graphics();
+        treat.fillStyle(GAME_CONFIG.COLOR_TREAT, 1);
+        treat.fillCircle(0, 0, 11);
+        treat.fillTriangle(-11, 0, -20, -8, -20, 8);
+        treat.setPosition(tx, ty);
+      }
+      scene.tweens.add({ targets: treat, y: ty - 6, duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      container.add(treat);
+      level.treatSprites.push({ obj: treat, baseX: tx, baseY: ty });
+    }
+
+    level.container = container;
+  }
+
+  // fill one annular-sector wedge (outer arc CW, inner arc CCW, closed)
+  _fillRingArc(g, a0, a1) {
+    g.beginPath();
+    g.arc(0, 0, this.outerRadius, a0, a1, false);
+    g.arc(0, 0, this.innerRadius, a1, a0, true);
+    g.closePath();
+    g.fillPath();
   }
 
   // ---- collision (geometry only) ----------------------------------------
   //  The cat is fixed at world angle FRONT_ANGLE; the tower spins under it, so
   //  the cat's angle in the tower's LOCAL frame is (FRONT_ANGLE - rotation).
-  getSegmentAt(depth) {
-    const level = this.levels[depth];
+  getSegmentAt(worldY) {
+    let level = null;
+    for (const l of this.levels) {
+      if (Math.abs(l.y - worldY) < GAME_CONFIG.LEVEL_HEIGHT / 2) { level = l; break; }
+    }
     if (!level) return null;
     const frontLocal = normalizeAngle(GAME_CONFIG.FRONT_ANGLE - this.rotation);
     for (const seg of level.segments) {
-      if (seg.broken) continue;
-      if (angleInArc(frontLocal, seg.startAngle, seg.endAngle)) return seg;
+      if (angleInArc(frontLocal, seg.startAngle, seg.endAngle)) return { level, segment: seg };
     }
-    return null; // gap (or all wedges broken) — fall through
+    return null;
   }
 
-  destroySegment(segment) { if (segment) segment.broken = true; }
+  // Fire-mode smash: burst of chunks, turn the wedge into a gap, rebuild.
+  destroySegment(level, segment) {
+    const midA = (segment.startAngle + segment.endAngle) / 2 + this.rotation;
+    const r = (this.outerRadius + this.innerRadius) / 2;
+    const screenY = (level.y - this._camY) - GAME_CONFIG.RIM_OFFSET;
+    const burstX = this.centerX + Math.cos(midA) * r;
+    const burstY = screenY + Math.sin(midA) * r;
 
+    let color = GAME_CONFIG.COLOR_PLATFORM_SAFE;
+    if (segment.type === SEGMENT_TYPE.DANGER) color = GAME_CONFIG.COLOR_PLATFORM_DANGER;
+    else if (segment.type === SEGMENT_TYPE.BOUNCE) color = GAME_CONFIG.COLOR_PLATFORM_BOUNCE;
+
+    const pieces = randomInt(8, 12);
+    for (let i = 0; i < pieces; i++) {
+      const angle = Math.random() * TWO_PI;
+      const dist = randomInRange(80, 150);
+      const size = randomInRange(10, 20);
+      const chunk = this.scene.add.graphics().setDepth(60);
+      chunk.fillStyle(color, 1);
+      chunk.fillCircle(0, 0, size);
+      chunk.setPosition(burstX, burstY);
+      this.scene.tweens.add({
+        targets: chunk,
+        x: burstX + Math.cos(angle) * dist,
+        y: burstY + Math.sin(angle) * dist + 100,
+        alpha: 0, scale: 0.2, duration: 600, ease: 'Quad.easeOut',
+        onComplete: () => chunk.destroy(),
+      });
+    }
+
+    segment.type = SEGMENT_TYPE.GAP;
+    segment.hasTreat = false;
+    this._disposeLevelVisuals(level);
+    this.buildLevelVisuals(level);
+  }
+
+  // Smash every wedge of a level (fish-treat clear). Rebuild once.
   clearLevel(depth) {
-    const level = this.levels[depth];
-    if (level) level.segments.forEach((s) => { s.broken = true; });
+    const level = this.levels.find((l) => l.depth === depth);
+    if (!level) return;
+    level.segments.forEach((s) => { s.type = SEGMENT_TYPE.GAP; s.hasTreat = false; });
+    this._disposeLevelVisuals(level);
+    this.buildLevelVisuals(level);
   }
 
-  destroy() {
-    this.levels = {};
-    if (this.ringG) { this.ringG.destroy(); this.ringG = null; }
-    if (this.treatG) { this.treatG.destroy(); this.treatG = null; }
+  // Remove a collected treat and refresh that level's visuals.
+  collectTreat(level, segment) {
+    segment.hasTreat = false;
+    this._disposeLevelVisuals(level);
+    this.buildLevelVisuals(level);
   }
+
+  getLevel(depth) { return this.levels.find((l) => l.depth === depth) || null; }
 
   // ---- render ------------------------------------------------------------
-  //  Each level is a complete donut ring: draw every non-broken, non-gap wedge
-  //  as a solid annular sector. Pseudo-3D: levels below the cat shrink and fade
-  //  slightly for a "looking down the tube" feel. Deepest first so nearer rings
-  //  paint over farther ones.
   render(camY, ballY) {
-    if (!this.ringG) return;
-    const g = this.ringG;
-    g.clear();
-    this.treatG.clear();
+    this._camY = camY;
+    this.centerX = GAME_CONFIG.TOWER_CENTER_X;
+    const scene = this.scene;
+    const H = scene.scale.height;
+    const R = this.outerRadius;
+    const catScreenY = H * GAME_CONFIG.CAT_SCREEN_Y_RATIO;
 
-    const cx = GAME_CONFIG.TOWER_CENTER_X;
-    const H = this.scene.scale.height;
-    const R = GAME_CONFIG.TOWER_RADIUS;
-    const rIn = GAME_CONFIG.POST_RADIUS;
-    const span = GAME_CONFIG.LEVELS_AHEAD * GAME_CONFIG.LEVEL_HEIGHT;
+    const minDepth = this.levels.length ? Math.min(...this.levels.map((l) => l.depth)) : 0;
 
-    const depths = Object.keys(this.levels).map(Number).sort((a, b) => b - a);
+    for (const level of this.levels) {
+      if (!level.container) continue;
+      const screenY = level.y - camY;
+      const cy = screenY - GAME_CONFIG.RIM_OFFSET;
 
-    for (const depth of depths) {
-      const level = this.levels[depth];
-      const cy = (level.y - camY) - GAME_CONFIG.RIM_OFFSET;
-      if (cy < -R * 1.9 || cy > H + R * 1.9) continue;   // offscreen
+      if (cy < -R * 2 || cy > H + R * 2) { level.container.setVisible(false); continue; }
+      level.container.setVisible(true);
 
-      const rel = (level.y - ballY) / span;
-      const scale = Phaser.Math.Clamp(1 - rel * 0.55, 0.4, 1.12);
-      const alpha = Phaser.Math.Clamp(1 - Math.max(rel, 0) * 0.85, 0.14, 1);
-      const rOut = R * scale;
-      const rInner = rIn * scale;
-
-      for (const seg of level.segments) {
-        if (seg.broken || seg.type === SEGMENT_TYPE.GAP) continue;  // gap = draw nothing
-
-        let color = SEGMENT_COLOR[seg.type];
-        if (seg.type === SEGMENT_TYPE.SAFE && depth % 2 === 1) {
-          color = GAME_CONFIG.COLOR_PLATFORM_SAFE_ALT;  // alternate shade for readability
-        }
-        const a0 = seg.startAngle + this.rotation;
-        const a1 = seg.endAngle + this.rotation;
-
-        // filled wedge
-        g.fillStyle(color, alpha);
-        fillArcRing(g, cx, cy, rInner, rOut, a0, a1);
-
-        // soft light rim so adjacent wedges / stacked rings stay legible
-        g.lineStyle(2, 0xffffff, 0.5 * alpha);
-        g.beginPath();
-        g.arc(cx, cy, rOut, a0, a1, false);
-        g.arc(cx, cy, rInner, a1, a0, true);
-        g.closePath();
-        g.strokePath();
+      // pseudo-3D: levels below the cat shrink + fade; above just fade
+      const dist = screenY - catScreenY;
+      let scale = 1.0, alpha = 1.0;
+      if (dist > 0) {
+        const t = Math.min(1, dist / (H * 0.8));
+        scale = 1.0 - t * 0.35;
+        alpha = 1.0 - t * 0.4;
+      } else {
+        const t = Math.min(1, Math.abs(dist) / (H * 0.3));
+        alpha = 1.0 - t * 0.8;
       }
 
-      this._drawTreats(level, cx, cy, rInner, rOut, alpha);
+      const c = level.container;
+      c.setPosition(this.centerX, cy).setRotation(this.rotation).setScale(scale).setAlpha(alpha);
+      c.setDepth(40 - (level.depth - minDepth));   // nearer levels paint on top, always below HUD/fx
+
+      for (const mask of level.masks) {
+        mask.setPosition(this.centerX, cy).setRotation(this.rotation).setScale(scale);
+      }
+    }
+
+    this._drawPost(camY, H);
+  }
+
+  // Continuous scratching-post spine with scrolling sisal bands.
+  _drawPost(camY, H) {
+    const g = this.postGraphics;
+    const x = this.centerX, W = 30;
+    g.clear();
+    g.fillStyle(GAME_CONFIG.COLOR_POST, 1);
+    g.fillRoundedRect(x - W / 2, -10, W, H + 20, 8);
+    const BAND = 46, bandH = 15;
+    for (let k = Math.floor(camY / BAND) - 1; k * BAND - camY < H + BAND; k++) {
+      const y = k * BAND - camY;
+      g.fillStyle(0xF3ECDD, 0.85);
+      g.fillRoundedRect(x - W / 2, y, W, bandH, 5);
     }
   }
 
-  _drawTreats(level, cx, cy, rInner, rOut, alpha) {
-    const g = this.treatG;
-    const scale = rOut / GAME_CONFIG.TOWER_RADIUS;
-    for (const seg of level.segments) {
-      if (seg.broken || !seg.hasTreat) continue;
-      const mid = (seg.startAngle + seg.endAngle) / 2 + this.rotation;
-      const rr = (rInner + rOut) / 2;
-      const tx = cx + Math.cos(mid) * rr;
-      const ty = cy + Math.sin(mid) * rr;
-      g.fillStyle(GAME_CONFIG.COLOR_TREAT, alpha);
-      g.fillCircle(tx, ty, 9 * scale);
-      g.fillTriangle(
-        tx - 9 * scale, ty,
-        tx - 16 * scale, ty - 7 * scale,
-        tx - 16 * scale, ty + 7 * scale
-      );
-    }
+  // ---- lifecycle ---------------------------------------------------------
+  _disposeLevelVisuals(level) {
+    if (level.treatSprites) level.treatSprites.forEach((t) => this.scene.tweens.killTweensOf(t.obj));
+    if (level.container) { level.container.destroy(true); level.container = null; }
+    if (level.masks) level.masks.forEach((m) => m.destroy());
+    level.masks = [];
+    level.treatSprites = [];
+  }
+
+  _disposeLevel(level) { this._disposeLevelVisuals(level); }
+
+  destroy() {
+    this.levels.forEach((l) => this._disposeLevel(l));
+    this.levels = [];
+    if (this.postGraphics) { this.postGraphics.destroy(); this.postGraphics = null; }
   }
 }

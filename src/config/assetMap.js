@@ -13,7 +13,7 @@
 const ASSET_MAP = {
   images: {
     // --- cat character poses ---
-    catIdle:     'assets/cat_idle_v2.png', // updated character pose (was cat_idle.png)
+    catIdle:     'assets/cat_idle.png',
     catFalling:  'assets/cat_falling.png', // falling pose (file was renamed cat_fall -> cat_falling)
     catFire:     'assets/cat_fire.png',    // aura + laser eyes baked in
     catGameover: 'assets/cat_over.png',    // (file is cat_over.png)
@@ -43,13 +43,7 @@ const ASSET_MAP = {
     stageIcon: 'assets/coin.png',  // pink swirl candy — used as the depth/stage icon
     logo:  'assets/logov2.png',    // "Cat Tower" wordmark
     play:  'assets/ui_play.png',   // pink play button
-    fishTreat: 'assets/treat_golden.png',  // updated golden treat coin (was fish_treat.png)
-
-    // --- new F-series HUD / VFX art (guarded by hasTex at each call site) ---
-    fireRing:   'assets/fx_fire_ring.png',        // F4: fire-mode ring behind the cat
-    destroyVfx: 'assets/vfx_platform_destroy.png',// F5: platform-shatter burst flash
-    comboMeter: 'assets/ui_combo_meter.png',      // F6: combo meter backing frame
-    depthBadge: 'assets/ui_depth_badge.png',      // F7: depth counter badge backing
+    fishTreat: 'assets/fish_treat.png',  // golden fish treat (dark matte removed offline -> transparent)
     // panel:     'assets/panel.png',       // TODO: add later (-> Graphics rounded panel)
     // button:    'assets/button.png',      // TODO: add later (-> Graphics button)
 

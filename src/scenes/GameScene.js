@@ -16,6 +16,7 @@ class GameScene extends Phaser.Scene {
     this.lastCollisionDepth = 0;   // depth 0 is the cat's spawn plane — skip it
     this._lastScore = -1;   // HUD caches: avoid re-rendering text textures every frame
     this._lastDepth = -1;
+    this._lastCombo = -1;
   }
 
   create() {
@@ -44,7 +45,7 @@ class GameScene extends Phaser.Scene {
     this.tower.update(0, this.cat.y);                 // seed initial levels
 
     this._makeFx();
-    this._buildHUD();
+    this.topHUD = new TopHUD(this);   // persistent top band (floor / score / combo)
     this._bindInput();
     this._buildFireVignette();
 
@@ -64,18 +65,12 @@ class GameScene extends Phaser.Scene {
       this.fireVignette.setVisible(true).setAlpha(0);
       this.tweens.add({ targets: this.fireVignette, alpha: 1, duration: 200 });
       this.cameras.main.shake(GAME_CONFIG.FIRE_MODE_DURATION * 1000, 0.005);
-      if (this.comboLabel) {
-        this.tweens.killTweensOf(this.comboLabel);
-        this.comboLabel.setScale(1);
-        this.tweens.add({ targets: this.comboLabel, scaleX: 1.3, scaleY: 1.3, duration: 420, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
-      }
     });
     this.events.on('fireModeEnd', () => {
       this.tweens.add({
         targets: this.fireVignette, alpha: 0, duration: 300,
         onComplete: () => this.fireVignette.setVisible(false),
       });
-      if (this.comboLabel) { this.tweens.killTweensOf(this.comboLabel); this.comboLabel.setScale(1); }
     });
   }
 
@@ -252,120 +247,12 @@ class GameScene extends Phaser.Scene {
   }
 
   // ------------------------------------------------------------------ HUD
-  //  Laid out for the fixed 540x960 canvas.
-  _buildHUD() {
-    // F7: depth-marker badge plate behind the top-left stage cluster
-    if (hasTex(this, 'depthBadge')) {
-      this.depthBadge = this.add.image(60, 40, 'depthBadge').setOrigin(0.5).setDepth(179);
-      this.depthBadge.setDisplaySize(96, 96);
-    }
-    // F6: combo-meter frame plate behind the top-center combo cluster
-    if (hasTex(this, 'comboMeter')) {
-      this.comboMeterBg = this.add.image(270, 70, 'comboMeter').setOrigin(0.5).setDepth(179);
-      const cw = this.comboMeterBg.width || 512;
-      this.comboMeterBg.setDisplaySize(236, 236 * (this.comboMeterBg.height / cw));
-    }
-
-    // score (top-right, right-aligned) + coin icon just to its left
-    this.coinPrefix = '';
-    this.scoreText = addStyledText(this, 500, 24, '0',
-      FONT_STYLES.scoreNumber, { origin: { x: 1, y: 0 }, depth: 180 });
-    if (hasTex(this, 'coin')) {
-      this.coinIcon = this.add.image(0, 0, 'coin').setOrigin(1, 0.5).setDepth(180);
-      this.coinIcon.setScale(38 / this.coinIcon.height);
-    } else {
-      this.coinPrefix = '🪙 ';
-      this.scoreText.setText(this.coinPrefix + '0');
-    }
-
-    // depth / stage (top-left) — coin icon + number
-    this.stagePrefix = '';
-    if (hasTex(this, 'stageIcon')) {
-      this.stageIcon = this.add.image(28, 40, 'stageIcon').setOrigin(0, 0.5).setDepth(180);
-      this.stageIcon.setScale(40 / this.stageIcon.height);
-      this.depthText = addStyledText(this, 28 + this.stageIcon.displayWidth + 8, 40, '0', FONT_STYLES.hudCounter, {
-        origin: { x: 0, y: 0.5 }, depth: 180, style: { stroke: '#ffffff', strokeThickness: 4 },
-      });
-    } else {
-      this.stagePrefix = '🏔️ ';
-      this.depthText = addStyledText(this, 40, 30, '🏔️ 0', FONT_STYLES.hudCounter, {
-        origin: { x: 0, y: 0 }, depth: 180, style: { stroke: '#ffffff', strokeThickness: 4 },
-      });
-    }
-
-    // combo meter (top-center, x=270) with a "콤보" caption above it
-    this.comboG = this.add.graphics().setDepth(180);
-    this.comboCaption = addStyledText(this, 270, 50, TXT.COMBO, FONT_STYLES.captionKo, { depth: 181 });
-    this.comboLabel = addStyledText(this, 270, 84, '', FONT_STYLES.hintKo, {
-      depth: 182, style: { color: '#FF6B35', stroke: '#ffffff', strokeThickness: 4 },
-    }).setVisible(false);
-    this._positionCoin();
-  }
-
-  _positionCoin() {
-    if (!this.coinIcon) return;
-    // sit the coin's right edge just left of the score number, vertically centred
-    const left = this.scoreText.x - this.scoreText.width;
-    this.coinIcon.setPosition(left - 8, this.scoreText.y + this.scoreText.height / 2);
-  }
-
+  //  All stats live in the persistent TopHUD band (see src/ui/TopHUD.js).
+  //  Only push a setter when a value actually changes (caches below).
   _updateHUD() {
-    if (this.score !== this._lastScore) {
-      this.scoreText.setText(this.coinPrefix + this.score);
-      this._positionCoin();
-      this._punchScore();
-      this._lastScore = this.score;
-    }
-    if (this.depth !== this._lastDepth) {
-      this.depthText.setText(this.stagePrefix + this.depth);
-      this._lastDepth = this.depth;
-    }
-    this._drawComboMeter();
-  }
-
-  // quick scale punch on every score change (1.0 -> 1.3 -> 1.0)
-  _punchScore() {
-    if (this._lastScore < 0) return;          // skip the initial set
-    this.tweens.killTweensOf(this.scoreText);
-    this.scoreText.setScale(1);
-    this.tweens.add({ targets: this.scoreText, scaleX: 1.3, scaleY: 1.3, duration: 100, yoyo: true, ease: 'Quad.out' });
-  }
-
-  _drawComboMeter() {
-    const g = this.comboG;
-    const cx = 270;
-    g.clear();
-
-    if (this.cat.isFireMode) {
-      // fire-mode countdown RING with 🔥 in the centre (pulse from fireModeStart)
-      const frac = Phaser.Math.Clamp(this.cat.fireModeTimer / GAME_CONFIG.FIRE_MODE_DURATION, 0, 1);
-      const ry = 84, r = 26;
-      g.lineStyle(7, 0x000000, 0.15); g.strokeCircle(cx, ry, r);
-      g.lineStyle(7, GAME_CONFIG.COLOR_FIRE, 1);
-      g.beginPath();
-      g.arc(cx, ry, r, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2, false);
-      g.strokePath();
-      this.comboCaption.setVisible(false);
-      this.comboLabel.setText('🔥').setVisible(true);
-      return;
-    }
-
-    // normal 4-segment combo bar
-    this.comboLabel.setVisible(false);
-    this.comboCaption.setVisible(true);
-    const cells = GAME_CONFIG.COMBO_FOR_FIRE_MODE;
-    const cw = 44, gap = 6, hgt = 18, y = 68;
-    const totalW = cells * cw + (cells - 1) * gap;
-    const x0 = cx - totalW / 2;
-    const filled = Math.min(this.cat.combo, cells);
-    for (let i = 0; i < cells; i++) {
-      const x = x0 + i * (cw + gap);
-      g.fillStyle(0x000000, 0.10); g.fillRoundedRect(x, y, cw, hgt, 6);
-      if (i < filled) {
-        g.fillStyle(i === cells - 1 ? GAME_CONFIG.COLOR_FIRE : 0xff9ec0, 1);
-        g.fillRoundedRect(x, y, cw, hgt, 6);
-      }
-    }
+    if (this.score !== this._lastScore) { this.topHUD.setScore(this.score); this._lastScore = this.score; }
+    if (this.depth !== this._lastDepth) { this.topHUD.setFloor(this.depth); this._lastDepth = this.depth; }
+    if (this.cat.combo !== this._lastCombo) { this.topHUD.setCombo(this.cat.combo); this._lastCombo = this.cat.combo; }
   }
 
   // ------------------------------------------------------------------ over
@@ -377,8 +264,6 @@ class GameScene extends Phaser.Scene {
     // through the whole death animation. Tidy them up here.
     this.tweens.killTweensOf(this.fireVignette);
     this.fireVignette.setVisible(false).setAlpha(0);
-    this.tweens.killTweensOf(this.comboLabel);
-    this.comboLabel.setScale(1).setVisible(false);
     this.cat.die();
     this.cameras.main.shake(240, 0.02);
     if (navigator.vibrate) navigator.vibrate([40, 40, 90]);

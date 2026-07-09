@@ -25,12 +25,8 @@ class Cat {
     // rotating fire aura behind the cat (generated ring; cat_fire also has a
     // baked aura). Hidden until fire mode.
     this.aura = null;
-    // Prefer the F4 "Fire Mode Timer Ring" art; fall back to the generated ring.
-    const ringKey = hasTex(scene, 'fireRing') ? 'fireRing'
-                  : (hasTex(scene, 'auraRing') ? 'auraRing' : null);
-    if (ringKey) {
-      this.aura = scene.add.image(x, y, ringKey).setDepth(99998).setVisible(false);
-      if (ringKey === 'fireRing') this.aura.setDisplaySize(150, 150); // scale big art to the cat
+    if (hasTex(scene, 'auraRing')) {
+      this.aura = scene.add.image(x, y, 'auraRing').setDepth(99998).setVisible(false);
     }
 
     // main sprite: real pose -> placeholder -> Graphics circle

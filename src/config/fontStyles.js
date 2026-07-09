@@ -15,54 +15,54 @@
 const FONT_STYLES = {
   // Big impact title (game name)
   titleEn: {
-    fontFamily: 'Fredoka', fontSize: '56px', fontStyle: '700',
+    fontFamily: '"Kkukkukk", "Fredoka", sans-serif', fontSize: '56px', fontStyle: '700',
     color: '#FF6B9D', stroke: '#FFFFFF', strokeThickness: 6,
     shadow: { offsetX: 0, offsetY: 4, color: '#000000', blur: 8, fill: true, alpha: 0.15 },
   },
   titleKo: {
-    fontFamily: '"Jua", sans-serif', fontSize: '38px',
+    fontFamily: '"Kkukkukk", "Jua", sans-serif', fontSize: '38px',
     color: '#FF8FB3', stroke: '#FFFFFF', strokeThickness: 5,
   },
 
   // Section headers
   headingKo: {
-    fontFamily: '"Jua", sans-serif', fontSize: '28px', color: '#5b3a29',
+    fontFamily: '"Kkukkukk", "Jua", sans-serif', fontSize: '28px', color: '#5b3a29',
   },
 
   // Body text
   bodyKo: {
-    fontFamily: '"Jua", sans-serif', fontSize: '20px', color: '#5b3a29',
+    fontFamily: '"Kkukkukk", "Jua", sans-serif', fontSize: '20px', color: '#5b3a29',
   },
 
   // Hint / instruction (playful handwritten feel)
   hintKo: {
-    fontFamily: '"Gamja Flower", "Gaegu", cursive', fontSize: '24px', color: '#8B5A3C',
+    fontFamily: '"Kkukkukk", "Gamja Flower", "Gaegu", cursive', fontSize: '24px', color: '#8B5A3C',
   },
 
   // Small captions
   captionKo: {
-    fontFamily: '"Poor Story", cursive', fontSize: '16px', color: '#8B5A3C', alpha: 0.8,
+    fontFamily: '"Kkukkukk", "Poor Story", cursive', fontSize: '16px', color: '#8B5A3C', alpha: 0.8,
   },
 
   // Score number (big, punchy)
   scoreNumber: {
-    fontFamily: 'Fredoka', fontSize: '48px', fontStyle: '700',
+    fontFamily: '"Kkukkukk", "Fredoka", sans-serif', fontSize: '48px', fontStyle: '700',
     color: '#FF6B9D', stroke: '#FFFFFF', strokeThickness: 4,
   },
 
   // Best score display
   bestScore: {
-    fontFamily: '"Jua", sans-serif', fontSize: '24px', color: '#FF8FA3',
+    fontFamily: '"Kkukkukk", "Jua", sans-serif', fontSize: '24px', color: '#FF8FA3',
   },
 
   // Depth / HUD counter
   hudCounter: {
-    fontFamily: '"Jua", sans-serif', fontSize: '22px', color: '#5b3a29',
+    fontFamily: '"Kkukkukk", "Jua", sans-serif', fontSize: '22px', color: '#5b3a29',
   },
 
   // Button text
   buttonKo: {
-    fontFamily: '"Jua", sans-serif', fontSize: '26px',
+    fontFamily: '"Kkukkukk", "Jua", sans-serif', fontSize: '26px',
     color: '#FFFFFF', stroke: '#FF6B9D', strokeThickness: 2,
   },
 };

@@ -10,7 +10,7 @@ const GAME_CONFIG = {
   // --- World / layout -----------------------------------------------------
   TOWER_RADIUS: 178,        // outer radius of a level ring (px)
   TOWER_CENTER_X: 0,        // set to width/2 at runtime (see GameScene)
-  POST_RADIUS: 52,          // inner hole radius — small hole / thick ring band; the coded
+  POST_RADIUS: 26,          // inner hole radius — small hole / thick ring band; the coded
                             //   central cylinder shows through it
   RIM_OFFSET: 92,           // ring centre sits this far ABOVE the cat contact line
   LEVEL_HEIGHT: 155,        // world Y distance between levels
@@ -32,7 +32,7 @@ const GAME_CONFIG = {
   FIRE_MODE_DURATION: 3.0,  // seconds
 
   // --- Input --------------------------------------------------------------
-  ROTATION_SENSITIVITY: 0.005, // radians of tower spin per px dragged
+  ROTATION_SENSITIVITY: 0.011, // radians of tower spin per px dragged (canonical Helix feel)
   ROTATION_FRICTION: 0.9,      // rotationSpeed *= this each idle frame (inertia)
 
   // --- Scoring ------------------------------------------------------------
@@ -85,9 +85,9 @@ const SEGMENT_TYPE = {
 
 // Korean-friendly cute fonts, graceful fallback to system Hangul offline.
 const FONT = {
-  TITLE: '"Fredoka", "Jua", "Do Hyeon", "Malgun Gothic", sans-serif',
-  BODY:  '"Jua", "Do Hyeon", "Malgun Gothic", sans-serif',
-  NUM:   '"Fredoka", "Jua", "Malgun Gothic", sans-serif',
+  TITLE: '"Kkukkukk", "Fredoka", "Jua", "Malgun Gothic", sans-serif',
+  BODY:  '"Kkukkukk", "Jua", "Do Hyeon", "Malgun Gothic", sans-serif',
+  NUM:   '"Kkukkukk", "Fredoka", "Jua", "Malgun Gothic", sans-serif',
 };
 
 // All player-facing copy (한국어)

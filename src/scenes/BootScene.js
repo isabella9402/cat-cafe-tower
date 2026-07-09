@@ -71,6 +71,7 @@ class BootScene extends Phaser.Scene {
 
     try {
       const fontLoads = [
+        document.fonts.load('400 32px "Kkukkukk"'),
         document.fonts.load('400 32px "Black Han Sans"'),
         document.fonts.load('400 32px "Do Hyeon"'),
         document.fonts.load('700 32px "Gaegu"'),

@@ -35,11 +35,11 @@ class Tower {
     // central scratching post (behind the rings; shows through the holes/gaps)
     this.postGraphics = scene.add.graphics().setDepth(-150);
 
-    // safe-platform texture variety: each level randomly picks one of these disc
-    // designs so consecutive rings look interleaved/different ("xen kẽ random").
-    this.safeTexPool = ['platformSafe', 'platformSafe2', 'platformSafe3']
-      .filter((k) => hasTex(scene, k));
-    if (!this.safeTexPool.length) this.safeTexPool = [PLATFORM_TEX[SEGMENT_TYPE.SAFE]];
+    // Only tower_normal is a true centre-holed donut, so all safe rings use it.
+    // (toy/bowl/hammock/house are solid mats that get clipped into broken shapes
+    // when masked to the ring annulus — the "xen kẽ" now comes from interleaved
+    // danger wedges + random gap positions, not from swapping the disc art.)
+    this.safeTexPool = [PLATFORM_TEX[SEGMENT_TYPE.SAFE]];
 
     scene.events.once('shutdown', () => this.destroy());
     scene.events.once('destroy', () => this.destroy());

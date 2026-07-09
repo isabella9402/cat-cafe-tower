@@ -19,10 +19,10 @@ const ASSET_MAP = {
     catGameover: 'assets/cat_over.png',    // (file is cat_over.png)
     catBall:     'assets/cat_ball.png',    // rolled-up bounce pose (menu/extra)
 
-    // --- platform tiers (full top-down discs, masked to arcs at runtime) ---
+    // --- platform tiers (full top-down DONUT discs, masked to arcs at runtime).
+    //  Only these three are true centre-holed rings; the other tower_*.png
+    //  (toy/bowl/hammock/house) are solid mats/off-centre and break when masked. --
     platformSafe:   'assets/tower_normal.png',
-    platformSafe2:  'assets/tower_toy.png',    // safe-platform variety ("xen kẽ")
-    platformSafe3:  'assets/tower_bowl.png',   // safe-platform variety ("xen kẽ")
     platformDanger: 'assets/tower_danger.png',
     platformBounce: 'assets/tower_cushion.png',
 

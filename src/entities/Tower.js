@@ -40,7 +40,7 @@ class Tower {
     // none of the clipping/bulge the old toy/bowl mats caused.
     this.safeTexPool = ['platformSafe', 'platformSafe2', 'platformSafe3', 'platformSafe4',
       'platformSafe5', 'platformSafe6', 'platformSafe7', 'platformSafe8', 'platformSafe9',
-      'platformSafe10', 'platformSafe11'].filter((k) => hasTex(scene, k));
+      'platformSafe10', 'platformSafe11', 'platformSafe12'].filter((k) => hasTex(scene, k));
     if (!this.safeTexPool.length) this.safeTexPool = [PLATFORM_TEX[SEGMENT_TYPE.SAFE]];
 
     scene.events.once('shutdown', () => this.destroy());

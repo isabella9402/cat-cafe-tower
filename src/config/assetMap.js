@@ -34,6 +34,7 @@ const ASSET_MAP = {
     platformSafe9:  'assets/platform_safe_v9.png',
     platformSafe10: 'assets/platform_safe_v10.png',
     platformSafe11: 'assets/platform_safe_v11.png',
+    platformSafe12: 'assets/platform_safe_v12.png',
     platformDanger: 'assets/tower_danger.png',
     platformBounce: 'assets/tower_cushion.png',
 

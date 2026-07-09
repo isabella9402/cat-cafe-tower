@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#FFE5EC" />
+  <title>Cat Café Tower · 캣 카페 타워</title>
+
+  <!-- Korean-friendly cute fonts (graceful fallback to system Hangul offline) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Jua&family=Do+Hyeon&family=Black+Han+Sans&family=Poor+Story&family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root { --bg: #FFE5EC; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: var(--bg);
+      font-family: "Jua", "Malgun Gothic", sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: none; user-select: none;
+    }
+    #game { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+    canvas { display: block; }
+    #loading {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: var(--bg); color: #5b3a29; font-size: 22px; z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="loading">불러오는 중...</div>
+
+  <!-- Phaser 3 from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+
+  <!-- Game code (classic scripts, loaded in dependency order so it runs on file:// too) -->
+  <script src="src/config/constants.js"></script>
+  <script src="src/config/assetMap.js"></script>
+  <script src="src/config/helpers.js"></script>
+  <script src="src/config/fontStyles.js"></script>
+  <script src="src/entities/Cat.js"></script>
+  <script src="src/entities/Tower.js"></script>
+  <script src="src/scenes/BootScene.js"></script>
+  <script src="src/scenes/MenuScene.js"></script>
+  <script src="src/scenes/GameScene.js"></script>
+  <script src="src/scenes/GameOverScene.js"></script>
+  <script src="src/main.js"></script>
+</body>
+</html>

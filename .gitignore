@@ -1,0 +1,7 @@
+# Local Claude Code / editor tooling (not game content)
+.claude/
+
+# OS / editor cruft
+Thumbs.db
+.DS_Store
+*.log

@@ -266,10 +266,20 @@ class GameScene extends Phaser.Scene {
       this.scoreText.setText(this.coinPrefix + '0');
     }
 
-    // depth (top-left) — compact "🏔️ N"
-    this.depthText = addStyledText(this, 40, 30, '🏔️ 0', FONT_STYLES.hudCounter, {
-      origin: { x: 0, y: 0 }, depth: 180, style: { stroke: '#ffffff', strokeThickness: 4 },
-    });
+    // depth / stage (top-left) — coin icon + number
+    this.stagePrefix = '';
+    if (hasTex(this, 'stageIcon')) {
+      this.stageIcon = this.add.image(28, 40, 'stageIcon').setOrigin(0, 0.5).setDepth(180);
+      this.stageIcon.setScale(40 / this.stageIcon.height);
+      this.depthText = addStyledText(this, 28 + this.stageIcon.displayWidth + 8, 40, '0', FONT_STYLES.hudCounter, {
+        origin: { x: 0, y: 0.5 }, depth: 180, style: { stroke: '#ffffff', strokeThickness: 4 },
+      });
+    } else {
+      this.stagePrefix = '🏔️ ';
+      this.depthText = addStyledText(this, 40, 30, '🏔️ 0', FONT_STYLES.hudCounter, {
+        origin: { x: 0, y: 0 }, depth: 180, style: { stroke: '#ffffff', strokeThickness: 4 },
+      });
+    }
 
     // combo meter (top-center, x=270) with a "콤보" caption above it
     this.comboG = this.add.graphics().setDepth(180);
@@ -295,7 +305,7 @@ class GameScene extends Phaser.Scene {
       this._lastScore = this.score;
     }
     if (this.depth !== this._lastDepth) {
-      this.depthText.setText(`🏔️ ${this.depth}`);
+      this.depthText.setText(this.stagePrefix + this.depth);
       this._lastDepth = this.depth;
     }
     this._drawComboMeter();

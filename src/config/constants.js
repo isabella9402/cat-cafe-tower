@@ -8,11 +8,11 @@
 
 const GAME_CONFIG = {
   // --- World / layout -----------------------------------------------------
-  TOWER_RADIUS: 180,        // outer radius of a level ring (px)
+  TOWER_RADIUS: 150,        // outer radius of a level ring (px) — smaller = less overlap
   TOWER_CENTER_X: 0,        // set to width/2 at runtime (see GameScene)
   POST_RADIUS: 55,          // inner hole radius (scratching-post gap)
-  RIM_OFFSET: 94,           // ring centre sits this far ABOVE the cat contact line
-  LEVEL_HEIGHT: 120,        // world Y distance between levels
+  RIM_OFFSET: 70,           // ring centre sits this far ABOVE the cat contact line
+  LEVEL_HEIGHT: 158,        // world Y distance between levels — more spacing = clean helix
   LEVELS_AHEAD: 12,         // levels pre-generated below the cat
   LEVELS_BEHIND: 3,         // levels kept above the cat before recycling
   FRONT_ANGLE: Math.PI / 2, // the "under the cat" angle (points down on screen)
@@ -95,8 +95,9 @@ const TXT = {
   TITLE:      'Cat Café Tower',
   SUBTITLE:   '캣 카페 타워',
   TAP_START:  '탭하여 시작 · Tap to start',
-  HOW_TO:     '드래그로 탑을 돌려 빈틈으로 쏙!',
-  HOW_TO_2:   '빨간 곳은 피하고, 연속으로 뚫으면 🔥',
+  HOW_TO:     '① 드래그로 탑을 빙글 돌려요',
+  HOW_TO_2:   '② 빈틈으로 냥이를 쏙 떨어뜨려요',
+  HOW_TO_3:   '③ 빨간 곳은 피해요! 연속 통과하면 🔥',
   BEST:       '최고 점수',
   SCORE:      '점수',
   DEPTH:      '깊이',

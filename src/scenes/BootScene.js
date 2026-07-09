@@ -77,6 +77,8 @@ class BootScene extends Phaser.Scene {
         document.fonts.load('400 32px "Gaegu"'),
         document.fonts.load('400 32px "Jua"'),
         document.fonts.load('400 32px "Poor Story"'),
+        document.fonts.load('400 32px "Gamja Flower"'),
+        document.fonts.load('700 32px "Dongle"'),
         document.fonts.load('700 32px "Fredoka"'),
       ].map((p) => (p && p.catch ? p.catch(() => {}) : Promise.resolve()));
       Promise.allSettled(fontLoads).then(() => document.fonts.ready).catch(() => {}).finally(go);

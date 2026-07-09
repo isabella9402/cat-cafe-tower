@@ -20,13 +20,13 @@ const FONT_STYLES = {
     shadow: { offsetX: 0, offsetY: 4, color: '#000000', blur: 8, fill: true, alpha: 0.15 },
   },
   titleKo: {
-    fontFamily: '"Black Han Sans", sans-serif', fontSize: '36px',
-    color: '#FFB6C1', stroke: '#FFFFFF', strokeThickness: 3,
+    fontFamily: '"Jua", sans-serif', fontSize: '38px',
+    color: '#FF8FB3', stroke: '#FFFFFF', strokeThickness: 5,
   },
 
   // Section headers
   headingKo: {
-    fontFamily: '"Do Hyeon", sans-serif', fontSize: '28px', color: '#5b3a29',
+    fontFamily: '"Jua", sans-serif', fontSize: '28px', color: '#5b3a29',
   },
 
   // Body text
@@ -36,7 +36,7 @@ const FONT_STYLES = {
 
   // Hint / instruction (playful handwritten feel)
   hintKo: {
-    fontFamily: '"Gaegu", cursive', fontSize: '22px', fontStyle: '700', color: '#8B5A3C',
+    fontFamily: '"Gamja Flower", "Gaegu", cursive', fontSize: '24px', color: '#8B5A3C',
   },
 
   // Small captions
@@ -52,17 +52,17 @@ const FONT_STYLES = {
 
   // Best score display
   bestScore: {
-    fontFamily: '"Do Hyeon", sans-serif', fontSize: '24px', color: '#FF8FA3',
+    fontFamily: '"Jua", sans-serif', fontSize: '24px', color: '#FF8FA3',
   },
 
   // Depth / HUD counter
   hudCounter: {
-    fontFamily: '"Do Hyeon", sans-serif', fontSize: '22px', color: '#5b3a29',
+    fontFamily: '"Jua", sans-serif', fontSize: '22px', color: '#5b3a29',
   },
 
   // Button text
   buttonKo: {
-    fontFamily: '"Do Hyeon", sans-serif', fontSize: '26px',
+    fontFamily: '"Jua", sans-serif', fontSize: '26px',
     color: '#FFFFFF', stroke: '#FF6B9D', strokeThickness: 2,
   },
 };

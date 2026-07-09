@@ -1,0 +1,22 @@
+# Local Claude Code / editor tooling (not game content)
+.claude/
+
+# OS / editor cruft
+Thumbs.db
+.DS_Store
+*.log
+
+# Local snapshot of the original (pre-rename) art — kept on disk, not in the repo
+assets_backup/
+
+# macOS zip cruft
+__MACOSX/
+
+# Reference footage (research only, not game content)
+*.mp4
+
+# Fonts: the game only loads font/kkukkukk/MemomentKkukkukk.ttf. Keep the repo
+# lean — the 26 MB .otf and the unused font families stay local only.
+font/kkukkukk/*.otf
+font/CookieRunFont_TTF/
+font/Cafe24DongdongRegular_v3.0/

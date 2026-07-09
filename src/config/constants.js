@@ -10,7 +10,8 @@ const GAME_CONFIG = {
   // --- World / layout -----------------------------------------------------
   TOWER_RADIUS: 178,        // outer radius of a level ring (px)
   TOWER_CENTER_X: 0,        // set to width/2 at runtime (see GameScene)
-  POST_RADIUS: 46,          // inner hole radius (no post now — smaller hole = fuller ring)
+  POST_RADIUS: 84,          // inner hole radius — big enough to cut the rope nubs baked
+                            //   into some platform textures (no central post at all now)
   RIM_OFFSET: 92,           // ring centre sits this far ABOVE the cat contact line
   LEVEL_HEIGHT: 155,        // world Y distance between levels
   LEVELS_AHEAD: 12,         // levels pre-generated below the cat

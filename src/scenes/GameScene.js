@@ -34,7 +34,7 @@ class GameScene extends Phaser.Scene {
       this.bg = null;
     }
 
-    // world state (Tower owns its own render layers, incl. the central post)
+    // world state (Tower owns its own render layers)
     this.tower = new Tower(this);
     this.cat = new Cat(this, GAME_CONFIG.TOWER_CENTER_X, 0);
     this.cat.reset(GAME_CONFIG.TOWER_CENTER_X, 0);
@@ -219,7 +219,7 @@ class GameScene extends Phaser.Scene {
   // ------------------------------------------------------------------ render
   _render() {
     if (this.bg) this.bg.tilePositionY = (this.camY * 0.3) / this.bgScale; // parallax
-    this.tower.render(this.camY, this.cat.y);   // Tower draws the rings + central post
+    this.tower.render(this.camY, this.cat.y);   // Tower draws the rings (no central post)
     this.cat.setScreenPos(GAME_CONFIG.TOWER_CENTER_X, this.cat.y - this.camY);
   }
 

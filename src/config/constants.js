@@ -8,11 +8,11 @@
 
 const GAME_CONFIG = {
   // --- World / layout -----------------------------------------------------
-  TOWER_RADIUS: 150,        // outer radius of a level ring (px) — smaller = less overlap
+  TOWER_RADIUS: 178,        // outer radius of a level ring (px)
   TOWER_CENTER_X: 0,        // set to width/2 at runtime (see GameScene)
-  POST_RADIUS: 55,          // inner hole radius (scratching-post gap)
-  RIM_OFFSET: 70,           // ring centre sits this far ABOVE the cat contact line
-  LEVEL_HEIGHT: 158,        // world Y distance between levels — more spacing = clean helix
+  POST_RADIUS: 46,          // inner hole radius (no post now — smaller hole = fuller ring)
+  RIM_OFFSET: 92,           // ring centre sits this far ABOVE the cat contact line
+  LEVEL_HEIGHT: 155,        // world Y distance between levels
   LEVELS_AHEAD: 12,         // levels pre-generated below the cat
   LEVELS_BEHIND: 3,         // levels kept above the cat before recycling
   FRONT_ANGLE: Math.PI / 2, // the "under the cat" angle (points down on screen)

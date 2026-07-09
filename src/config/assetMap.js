@@ -38,13 +38,10 @@ const ASSET_MAP = {
     platformDanger: 'assets/tower_danger.png',
     platformBounce: 'assets/tower_cushion.png',
 
-    // central scratching-post texture (sisal rope, tiles seamlessly on Y)
-    towerPost: 'assets/tower_post.png',
-
     // --- items / UI ---
     coin:  'assets/ui_coin.png',   // pancake-coin, used as the score icon
     stageIcon: 'assets/coin.png',  // pink swirl candy — used as the depth/stage icon
-    logo:  'assets/logov1.png',    // "Cat Café Tower" wordmark (new detailed logo)
+    logo:  'assets/logov2.png',    // "Cat Tower" wordmark
     play:  'assets/ui_play.png',   // pink play button
     fishTreat: 'assets/fish_treat.png',  // golden fish treat (dark matte removed offline -> transparent)
     // panel:     'assets/panel.png',       // TODO: add later (-> Graphics rounded panel)

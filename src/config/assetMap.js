@@ -37,6 +37,9 @@ const ASSET_MAP = {
     platformDanger: 'assets/tower_danger.png',
     platformBounce: 'assets/tower_cushion.png',
 
+    // central scratching-post texture (sisal rope, tiles seamlessly on Y)
+    towerPost: 'assets/tower_post.png',
+
     // --- items / UI ---
     coin:  'assets/ui_coin.png',   // pancake-coin, used as the score icon
     logo:  'assets/logo.png',      // "Cat Café Tower" wordmark (renamed from ui_logo.png)

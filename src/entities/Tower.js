@@ -345,10 +345,30 @@ class Tower {
     this._drawPost(camY, H);
   }
 
-  // Continuous scratching-post spine with scrolling sisal bands.
+  // Central scratching-post spine. Uses the tileable sisal texture when present
+  // (scrolls with the world so the rope appears to move up as the cat falls),
+  // else falls back to a graphics rectangle with scrolling bands.
   _drawPost(camY, H) {
+    const x = this.centerX;
+    if (hasTex(this.scene, 'towerPost')) {
+      if (this.postGraphics) this.postGraphics.clear();   // hide the fallback
+      const W = 56;                                        // on-screen post width
+      if (!this.postSprite) {
+        this.postSprite = this.scene.add.tileSprite(x, H / 2, W, H + 400, 'towerPost')
+          .setDepth(-50);                                 // behind rings, in front of bg
+        const src = this.scene.textures.get('towerPost').getSourceImage();
+        this._postScale = W / src.width;                  // map rope width -> W (one copy across)
+        this.postSprite.setTileScale(this._postScale, this._postScale);
+      }
+      this.postSprite.setPosition(x, H / 2);
+      // scroll the texture with the world: displayed offset = tilePositionY * scale
+      this.postSprite.tilePositionY = camY / this._postScale;
+      return;
+    }
+
+    // fallback: solid brown rounded post with scrolling highlight bands
     const g = this.postGraphics;
-    const x = this.centerX, W = 30;
+    const W = 30;
     g.clear();
     g.fillStyle(GAME_CONFIG.COLOR_POST, 1);
     g.fillRoundedRect(x - W / 2, -10, W, H + 20, 8);
@@ -375,5 +395,6 @@ class Tower {
     this.levels.forEach((l) => this._disposeLevel(l));
     this.levels = [];
     if (this.postGraphics) { this.postGraphics.destroy(); this.postGraphics = null; }
+    if (this.postSprite) { this.postSprite.destroy(); this.postSprite = null; }
   }
 }

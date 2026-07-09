@@ -184,6 +184,7 @@ class GameScene extends Phaser.Scene {
     this.fx.pop.setParticleTint(fire ? this.smashTints() : [0xEAD9BE, 0xffc9de, 0xffffff]);
     this.fx.pop.explode(fire ? 14 : 8, GAME_CONFIG.TOWER_CENTER_X, this.cat.sprite.y);
     if (fire) this.cameras.main.shake(60, 0.004);
+    this._comboFeedback(this.cat.combo, this.cat.sprite.y);
   }
 
   _bounce(level, seg) {
@@ -194,6 +195,11 @@ class GameScene extends Phaser.Scene {
 
     if (boosted) this.fx.star.explode(9, GAME_CONFIG.TOWER_CENTER_X, this.cat.sprite.y);
     else this.fx.smoke.explode(5, GAME_CONFIG.TOWER_CENTER_X, this.cat.sprite.y);
+
+    // impact juice: expanding shockwave ring + a paw-splat stamped on the ring
+    const col = boosted ? GAME_CONFIG.COLOR_PLATFORM_BOUNCE : 0xFFB6C1;
+    this._shockwave(GAME_CONFIG.TOWER_CENTER_X, this.cat.sprite.y, col);
+    this._stampSplat(level);
   }
 
   _collectTreat(level, seg) {
@@ -207,6 +213,7 @@ class GameScene extends Phaser.Scene {
     this.fx.star.setParticleTint([GAME_CONFIG.COLOR_TREAT, 0xffffff, 0xff9ec0]);
     this.fx.star.explode(16, GAME_CONFIG.TOWER_CENTER_X, this.cat.sprite.y);
     this.cameras.main.shake(120, 0.006);
+    this._comboFeedback(this.cat.combo, this.cat.sprite.y);
   }
 
   smashTints() { return [0xff7a3d, 0xffd24a, 0xffffff]; }
@@ -216,6 +223,7 @@ class GameScene extends Phaser.Scene {
     if (this.bg) this.bg.tilePositionY = (this.camY * 0.3) / this.bgScale; // parallax
     this.tower.render(this.camY, this.cat.y);   // Tower draws the rings (no central post)
     this.cat.setScreenPos(GAME_CONFIG.TOWER_CENTER_X, this.cat.y - this.camY);
+    this._drawSpeedLines();
   }
 
   // ------------------------------------------------------------------ fx
@@ -239,11 +247,111 @@ class GameScene extends Phaser.Scene {
       speed: { min: 60, max: 200 }, scale: { start: 0.8, end: 0 }, lifespan: 560,
       rotate: { start: 0, end: 180 }, tint: [0x9fe6c0, 0xffd24a, 0xffffff], emitting: false,
     }).setDepth(70);
+
+    // Juice overlays (screen-pinned): edge speed-lines while diving, and a
+    // brief full-screen flash on combo milestones. Both below the cat (100000)
+    // so it stays visible, and below the HUD band (HUD_DEPTH) so it stays on top.
+    this.speedLines = this.add.graphics().setDepth(70000).setScrollFactor(0);
+    this.flash = this.add.graphics().setDepth(500000).setScrollFactor(0).setVisible(false);
   }
 
   _burst(tints, n) {
     this.fx.pop.setParticleTint(tints);
     this.fx.pop.explode(n, GAME_CONFIG.TOWER_CENTER_X, this.cat.sprite.y);
+  }
+
+  // ---- Helix juice -------------------------------------------------------
+  // Expanding impact ring at a landing point (screen space).
+  _shockwave(x, y, color) {
+    const ring = this.add.graphics().setDepth(72000);
+    ring.lineStyle(5, color, 0.85);
+    ring.strokeCircle(0, 0, 13);
+    ring.setPosition(x, y);
+    this.tweens.add({
+      targets: ring, scaleX: 3.3, scaleY: 3.3, alpha: 0,
+      duration: 360, ease: 'Cubic.easeOut', onComplete: () => ring.destroy(),
+    });
+  }
+
+  // Stamp a fading paw-print onto the ring the cat just bounced off. Added as a
+  // child of the level container so it rides the tower's spin/scale and scrolls
+  // — like the paint splats a Helix ball leaves behind.
+  _stampSplat(level) {
+    if (!level || !level.container) return;
+    const a = normalizeAngle(GAME_CONFIG.FRONT_ANGLE - this.tower.rotation);
+    const r = (this.tower.innerRadius + this.tower.outerRadius) / 2;
+    const g = this.scene ? this.add.graphics() : null;
+    if (!g) return;
+    g.fillStyle(0xFF9EC0, 0.5);
+    g.fillEllipse(0, 6, 17, 14);                                  // pad
+    [[-9, -3], [-3.5, -9], [3.5, -9], [9, -3]].forEach(([dx, dy]) => g.fillCircle(dx, dy, 4)); // toes
+    g.setPosition(Math.cos(a) * r, Math.sin(a) * r).setRotation(a + Math.PI / 2);
+    level.container.add(g);
+    this.tweens.add({
+      targets: g, alpha: 0, duration: 1500, delay: 500, ease: 'Quad.easeIn',
+      onComplete: () => g.destroy(),
+    });
+  }
+
+  // Rising combo chip on every streak gap; big praise + flash + stars at milestones.
+  _comboFeedback(combo, y) {
+    if (combo < 2) return;
+    const x = GAME_CONFIG.TOWER_CENTER_X;
+
+    const chip = addStyledText(this, x + 42, y - 8, '×' + combo, {
+      fontFamily: FONT.NUM, fontSize: '26px', color: '#FF8C42', stroke: '#ffffff', strokeThickness: 3,
+    }, { depth: 200000 });
+    this.tweens.add({ targets: chip, y: chip.y - 46, alpha: 0, duration: 620, ease: 'Quad.easeOut', onComplete: () => chip.destroy() });
+
+    const praise = this._praiseFor(combo);
+    if (!praise) return;
+    const t = addStyledText(this, x, y - 74, praise, {
+      fontFamily: FONT.TITLE, fontSize: '40px', color: '#E84A7F', stroke: '#ffffff', strokeThickness: 5,
+    }, { depth: 200001 });
+    t.setScale(0.6);
+    this.tweens.add({ targets: t, scale: 1.1, duration: 200, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: t, y: t.y - 32, alpha: 0, delay: 440, duration: 420, onComplete: () => t.destroy() });
+    this._flash(0xffffff, 0.26);
+    this.fx.star.setParticleTint([0xffd24a, 0xff9ec0, 0xffffff]);
+    this.fx.star.explode(12, x, y);
+  }
+
+  _praiseFor(c) {
+    const map = { 3: 'GOOD!', 5: 'GREAT!', 7: 'PERFECT!', 10: 'AMAZING!' };
+    if (map[c]) return map[c];
+    if (c >= 12 && c % 5 === 0) return 'UNREAL!';
+    return null;
+  }
+
+  _flash(color, alpha) {
+    const f = this.flash;
+    f.clear();
+    f.fillStyle(color, 1);
+    f.fillRect(0, 0, this.scale.width, this.scale.height);
+    f.setAlpha(alpha).setVisible(true);
+    this.tweens.killTweensOf(f);
+    this.tweens.add({ targets: f, alpha: 0, duration: 260, ease: 'Quad.easeOut', onComplete: () => f.setVisible(false) });
+  }
+
+  // Streaking vertical lines at the screen edges while diving fast / in fire mode.
+  _drawSpeedLines() {
+    const g = this.speedLines;
+    if (!g) return;
+    g.clear();
+    const fire = this.cat.isFireMode;
+    const t = fire ? 1 : Phaser.Math.Clamp((this.cat.velocityY - 650) / (GAME_CONFIG.MAX_FALL_SPEED - 650), 0, 1);
+    if (t <= 0.03) return;
+    const w = this.scale.width, h = this.scale.height;
+    const col = fire ? GAME_CONFIG.COLOR_FIRE : 0xffffff;
+    const baseA = (fire ? 0.22 : 0.15) * t;
+    const scroll = this.camY * (fire ? 1.7 : 1.15);
+    const lines = [[14, 90], [30, 60], [22, 120], [w - 16, 90], [w - 32, 60], [w - 24, 120]];
+    for (let i = 0; i < lines.length; i++) {
+      const x = lines[i][0], len = lines[i][1], span = h + len;
+      const y = (((-scroll + i * 137) % span) + span) % span - len;   // stream upward
+      g.fillStyle(col, baseA * (0.7 + 0.3 * ((i % 3) / 2)));
+      g.fillRect(x, y, i % 2 ? 3 : 2, len);
+    }
   }
 
   // ------------------------------------------------------------------ HUD

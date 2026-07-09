@@ -1,11 +1,15 @@
 /* =========================================================================
  *  Tower — the rotating stack of level rings for the top-down Helix descent.
  *
- *  A "level" is a full 360° ring at worldY = depth * LEVEL_HEIGHT, divided into
- *  segments that tile the circle exactly (applyCut guarantees 2π coverage with
- *  no overlaps or holes). One or more arcs are the GAP (type 'gap' — real
- *  angular space that is simply never drawn); the rest are SAFE / DANGER /
- *  BOUNCE wedges.
+ *  A "level" is a full 360° ring at worldY = depth * LEVEL_HEIGHT: one GAP arc
+ *  (type 'gap' — real angular space that is simply never drawn) followed by
+ *  SOLID_SEGMENTS equal wedges, each SAFE / DANGER / BOUNCE. Danger wedges are
+ *  spread out among the safe ones so the ring reads as alternating slices
+ *  ("xen kẽ"). gap + wedges tile 2π exactly (no overlaps/holes).
+ *
+ *  As the cat drops below a level, that level shatters into a burst of chunks
+ *  and is removed immediately (shatterPassedLevels) — so the space above the
+ *  cat stays clean, like canonical Helix Jump.
  *
  *  RENDERING (canonical Helix look): each level owns a Phaser container. Per
  *  platform type we add ONE full-ring PNG (tower_normal / tower_danger /
@@ -31,6 +35,12 @@ class Tower {
     // central scratching post (behind the rings; shows through the holes/gaps)
     this.postGraphics = scene.add.graphics().setDepth(-150);
 
+    // safe-platform texture variety: each level randomly picks one of these disc
+    // designs so consecutive rings look interleaved/different ("xen kẽ random").
+    this.safeTexPool = ['platformSafe', 'platformSafe2', 'platformSafe3']
+      .filter((k) => hasTex(scene, k));
+    if (!this.safeTexPool.length) this.safeTexPool = [PLATFORM_TEX[SEGMENT_TYPE.SAFE]];
+
     scene.events.once('shutdown', () => this.destroy());
     scene.events.once('destroy', () => this.destroy());
   }
@@ -47,14 +57,9 @@ class Tower {
     this.rotation = ((this.rotation + deltaRadians) % TWO_PI + TWO_PI) % TWO_PI;
   }
 
-  // Recycle passed levels, extend the tower ahead of the cat.
+  // Extend the tower ahead of the cat. Passed levels are removed by
+  // shatterPassedLevels() (called after collision), not culled here.
   update(dt, catY) {
-    const cull = catY - GAME_CONFIG.LEVELS_BEHIND * GAME_CONFIG.LEVEL_HEIGHT;
-    this.levels = this.levels.filter((l) => {
-      if (l.y < cull) { this._disposeLevel(l); return false; }
-      return true;
-    });
-
     const targetY = catY + GAME_CONFIG.LEVELS_AHEAD * GAME_CONFIG.LEVEL_HEIGHT;
     let nextDepth = this.levels.length ? Math.max(...this.levels.map((l) => l.depth)) + 1 : 1;
     let deepestY = this.levels.length ? Math.max(...this.levels.map((l) => l.y)) : -Infinity;
@@ -66,36 +71,41 @@ class Tower {
     }
   }
 
-  // --- level generation: guaranteed full-circle coverage -----------------
+  // --- level generation: gap + evenly-spaced wedges, danger interleaved ---
+  //  The non-gap arc is split into SOLID_SEGMENTS equal wedges; danger wedges
+  //  are spread out among them so each ring reads as alternating safe/danger
+  //  slices (the canonical Helix "xen kẽ" look). gap + wedges tile 2π exactly.
   generateLevel(depth) {
     const tier = getDifficultyTier(depth);
-    const gapWidthRad = Phaser.Math.DegToRad(tier.gapWidth);
+    const gapSpan = Phaser.Math.DegToRad(tier.gapWidth);
+    const gapStart = Math.random() * TWO_PI;
+    const gapEnd = gapStart + gapSpan;             // wedges begin here, sweep round
+
+    const n = GAME_CONFIG.SOLID_SEGMENTS;
+    const each = (TWO_PI - gapSpan) / n;
+
     let dangerCount = randomInt(tier.dangerCount[0], tier.dangerCount[1]);
     if (depth < GAME_CONFIG.SAFE_INTRO_LEVELS) dangerCount = 0;   // fair intro
-    const dangerWidthRad = Phaser.Math.DegToRad(30);
-
-    // start as a single full-circle safe segment, then cut pieces out of it
-    let segments = [{ startAngle: 0, endAngle: TWO_PI, type: SEGMENT_TYPE.SAFE }];
-
-    const gapStart = Math.random() * TWO_PI;
-    segments = this.applyCut(segments, gapStart, gapStart + gapWidthRad, SEGMENT_TYPE.GAP);
-
-    for (let i = 0; i < dangerCount; i++) {
-      for (let attempt = 0; attempt < 20; attempt++) {
-        const dStart = Math.random() * TWO_PI;
-        const dEnd = dStart + dangerWidthRad;
-        if (this.isAllType(segments, dStart, dEnd, SEGMENT_TYPE.SAFE)) {
-          segments = this.applyCut(segments, dStart, dEnd, SEGMENT_TYPE.DANGER);
-          break;
-        }
-      }
-    }
+    dangerCount = Math.min(dangerCount, n - 1);                   // keep >=1 landable wedge
+    const dangerSlots = this._dangerSlots(n, dangerCount);        // spread out for alternation
 
     const isBounceLevel =
       depth >= GAME_CONFIG.BOUNCE_BOOSTER_MIN_DEPTH &&
       Math.random() < GAME_CONFIG.BOUNCE_BOOSTER_CHANCE;
-    if (isBounceLevel) {
-      segments.forEach((s) => { if (s.type === SEGMENT_TYPE.SAFE) s.type = SEGMENT_TYPE.BOUNCE; });
+
+    const segments = [{
+      startAngle: normalizeAngle(gapStart), endAngle: normalizeAngle(gapEnd),
+      type: SEGMENT_TYPE.GAP, hasTreat: false,
+    }];
+    for (let k = 0; k < n; k++) {
+      const a0 = gapEnd + k * each;
+      let type;
+      if (dangerSlots.has(k)) type = SEGMENT_TYPE.DANGER;
+      else type = isBounceLevel ? SEGMENT_TYPE.BOUNCE : SEGMENT_TYPE.SAFE;
+      segments.push({
+        startAngle: normalizeAngle(a0), endAngle: normalizeAngle(a0 + each),
+        type, hasTreat: false,
+      });
     }
 
     if (depth >= GAME_CONFIG.FISH_TREAT_MIN_DEPTH &&
@@ -107,64 +117,23 @@ class Tower {
     const level = {
       depth, y: depth * GAME_CONFIG.LEVEL_HEIGHT,
       segments, isBounceLevel,
-      container: null, masks: [], treatSprites: [],
+      safeTex: this.safeTexPool[randomInt(0, this.safeTexPool.length - 1)],  // per-level variety
+      container: null, masks: [], treatSprites: [], shattered: false,
     };
     this.buildLevelVisuals(level);
     return level;
   }
 
-  // Replace the type of the arc [cutStart, cutEnd] wherever it overlaps
-  // existing segments, splitting them as needed. Handles the 0/2π seam by
-  // recursing on the two halves.
-  applyCut(segments, cutStart, cutEnd, newType) {
-    cutStart = normalizeAngle(cutStart);
-    cutEnd = normalizeAngle(cutEnd);
-    // A wrapped cut (crosses the 0/2π seam) becomes two non-wrapping cuts.
-    // NOTE: normalizeAngle(2π) === 0, so we must NOT re-run applyCut with 2π as
-    // an argument (it would wrap again forever) — cut the raw ranges directly.
-    if (cutStart > cutEnd) {
-      const r = this._cutRange(segments, cutStart, TWO_PI, newType);
-      return this._cutRange(r, 0, cutEnd, newType);
-    }
-    return this._cutRange(segments, cutStart, cutEnd, newType);
-  }
-
-  // Cut a single non-wrapping range [cutStart, cutEnd] (0 <= start <= end <= 2π).
-  _cutRange(segments, cutStart, cutEnd, newType) {
-    if (cutEnd - cutStart < 1e-9) return segments;
-    const result = [];
-    for (const seg of segments) {
-      if (seg.endAngle <= cutStart || seg.startAngle >= cutEnd) { result.push(seg); continue; }
-      if (seg.startAngle >= cutStart && seg.endAngle <= cutEnd) {
-        result.push({ startAngle: seg.startAngle, endAngle: seg.endAngle, type: newType, hasTreat: seg.hasTreat });
-        continue;
-      }
-      if (seg.startAngle < cutStart) {
-        result.push({ startAngle: seg.startAngle, endAngle: cutStart, type: seg.type, hasTreat: seg.hasTreat });
-      }
-      result.push({
-        startAngle: Math.max(seg.startAngle, cutStart),
-        endAngle: Math.min(seg.endAngle, cutEnd),
-        type: newType,
-      });
-      if (seg.endAngle > cutEnd) {
-        result.push({ startAngle: cutEnd, endAngle: seg.endAngle, type: seg.type, hasTreat: seg.hasTreat });
-      }
-    }
-    return result;
-  }
-
-  // True if the whole arc [testStart, testEnd] lies within segments of the
-  // required type (used to avoid dropping a danger on top of the gap).
-  isAllType(segments, testStart, testEnd, requiredType) {
-    testStart = normalizeAngle(testStart);
-    testEnd = normalizeAngle(testEnd);
-    if (testStart > testEnd) return false;   // skip seam-crossing candidates
-    for (const seg of segments) {
-      if (seg.endAngle <= testStart || seg.startAngle >= testEnd) continue;
-      if (seg.type !== requiredType) return false;
-    }
-    return true;
+  // Choose `count` wedge indices out of `n`, spread evenly (with a random phase)
+  // so danger wedges alternate with safe ones instead of clumping.
+  _dangerSlots(n, count) {
+    const set = new Set();
+    if (count <= 0) return set;
+    const step = n / count;
+    let pos = Math.random() * n;
+    for (let i = 0; i < count; i++) { set.add(Math.floor(pos) % n); pos += step; }
+    while (set.size < count) set.add(randomInt(0, n - 1));   // fill if rounding collided
+    return set;
   }
 
   // --- visuals: one container per level, sprite+mask per type ------------
@@ -182,7 +151,8 @@ class Tower {
 
     for (const type of Object.keys(byType)) {
       const segs = byType[type];
-      const key = PLATFORM_TEX[type];
+      // safe wedges use this level's chosen variant; danger/bounce are fixed
+      const key = (type === SEGMENT_TYPE.SAFE && level.safeTex) ? level.safeTex : PLATFORM_TEX[type];
 
       if (hasTex(scene, key)) {
         const sprite = scene.add.image(0, 0, key);
@@ -253,8 +223,9 @@ class Tower {
     return null;
   }
 
-  // Fire-mode smash: burst of chunks, turn the wedge into a gap, rebuild.
-  destroySegment(level, segment) {
+  // Spray a burst of coloured chunks outward from one wedge (the signature
+  // Helix "break apart"). Positions are screen-space (camera is at scrollY 0).
+  _wedgeBurst(level, segment, pieces) {
     const midA = (segment.startAngle + segment.endAngle) / 2 + this.rotation;
     const r = (this.outerRadius + this.innerRadius) / 2;
     const screenY = (level.y - this._camY) - GAME_CONFIG.RIM_OFFSET;
@@ -265,11 +236,10 @@ class Tower {
     if (segment.type === SEGMENT_TYPE.DANGER) color = GAME_CONFIG.COLOR_PLATFORM_DANGER;
     else if (segment.type === SEGMENT_TYPE.BOUNCE) color = GAME_CONFIG.COLOR_PLATFORM_BOUNCE;
 
-    const pieces = randomInt(8, 12);
     for (let i = 0; i < pieces; i++) {
       const angle = Math.random() * TWO_PI;
-      const dist = randomInRange(80, 150);
-      const size = randomInRange(10, 20);
+      const dist = randomInRange(60, 140);
+      const size = randomInRange(6, 15);
       const chunk = this.scene.add.graphics().setDepth(60);
       chunk.fillStyle(color, 1);
       chunk.fillCircle(0, 0, size);
@@ -278,15 +248,38 @@ class Tower {
         targets: chunk,
         x: burstX + Math.cos(angle) * dist,
         y: burstY + Math.sin(angle) * dist + 100,
-        alpha: 0, scale: 0.2, duration: 600, ease: 'Quad.easeOut',
+        alpha: 0, scale: 0.2, duration: 520, ease: 'Quad.easeOut',
         onComplete: () => chunk.destroy(),
       });
     }
+  }
 
+  // Fire-mode smash: burst one wedge into chunks, turn it into a gap, rebuild.
+  destroySegment(level, segment) {
+    this._wedgeBurst(level, segment, randomInt(8, 12));
     segment.type = SEGMENT_TYPE.GAP;
     segment.hasTreat = false;
     this._disposeLevelVisuals(level);
     this.buildLevelVisuals(level);
+  }
+
+  // The cat has dropped past these levels: shatter each remaining wedge into a
+  // spray of chunks and remove the level immediately (canonical Helix — the
+  // ring above the ball breaks apart and vanishes the moment you fall below it).
+  shatterPassedLevels(catY) {
+    const remaining = [];
+    for (const lvl of this.levels) {
+      if (!lvl.shattered && catY - lvl.y > 2) {
+        for (const seg of lvl.segments) {
+          if (seg.type !== SEGMENT_TYPE.GAP) this._wedgeBurst(lvl, seg, randomInt(3, 5));
+        }
+        lvl.shattered = true;
+        this._disposeLevelVisuals(lvl);   // ring disappears; chunks live on their own tweens
+      } else {
+        remaining.push(lvl);
+      }
+    }
+    this.levels = remaining;
   }
 
   // Smash every wedge of a level (fish-treat clear). Rebuild once.

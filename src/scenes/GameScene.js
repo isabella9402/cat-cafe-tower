@@ -137,6 +137,9 @@ class GameScene extends Phaser.Scene {
     // collisions only while descending (platforms block from above only)
     if (this.cat.velocityY > 0 && !this._dead) this.checkCollision();
 
+    // levels the cat has dropped below shatter and vanish immediately
+    this.tower.shatterPassedLevels(this.cat.y);
+
     // pose: falling while descending, idle while rising (fire pose managed by Cat)
     if (!this.cat.isFireMode) this.cat.setState(this.cat.velocityY > 0 ? 'falling' : 'idle');
 

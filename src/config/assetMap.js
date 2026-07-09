@@ -21,6 +21,8 @@ const ASSET_MAP = {
 
     // --- platform tiers (full top-down discs, masked to arcs at runtime) ---
     platformSafe:   'assets/tower_normal.png',
+    platformSafe2:  'assets/tower_toy.png',    // safe-platform variety ("xen kẽ")
+    platformSafe3:  'assets/tower_bowl.png',   // safe-platform variety ("xen kẽ")
     platformDanger: 'assets/tower_danger.png',
     platformBounce: 'assets/tower_cushion.png',
 

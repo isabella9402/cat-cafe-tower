@@ -14,7 +14,7 @@ const ASSET_MAP = {
   images: {
     // --- cat character poses ---
     catIdle:     'assets/cat_idle.png',
-    catFalling:  'assets/cat_fall.png',    // (file is cat_fall.png, not cat_falling)
+    catFalling:  'assets/cat_falling.png', // falling pose (file was renamed cat_fall -> cat_falling)
     catFire:     'assets/cat_fire.png',    // aura + laser eyes baked in
     catGameover: 'assets/cat_over.png',    // (file is cat_over.png)
     catBall:     'assets/cat_ball.png',    // rolled-up bounce pose (menu/extra)
@@ -26,9 +26,9 @@ const ASSET_MAP = {
 
     // --- items / UI ---
     coin:  'assets/ui_coin.png',   // pancake-coin, used as the score icon
-    logo:  'assets/ui_logo.png',   // "Cat Café Tower" wordmark
+    logo:  'assets/logo.png',      // "Cat Café Tower" wordmark (renamed from ui_logo.png)
     play:  'assets/ui_play.png',   // pink play button
-    // fishTreat: 'assets/fish_treat.png',  // TODO: add later (no transparent fish art yet -> Graphics fish)
+    fishTreat: 'assets/fish_treat.png',  // golden fish treat (dark matte removed offline -> transparent)
     // panel:     'assets/panel.png',       // TODO: add later (-> Graphics rounded panel)
     // button:    'assets/button.png',      // TODO: add later (-> Graphics button)
 
@@ -41,7 +41,7 @@ const ASSET_MAP = {
 
   // Sprite sheets (grid of frames).  vfx_sparkle is a clean 4x2 / 128x129 grid.
   spritesheets: {
-    vfxSparkle: { path: 'assets/vfx_sparkle.png', frameWidth: 128, frameHeight: 129 },
+    vfxSparkle: { path: 'assets/sparkle.png', frameWidth: 128, frameHeight: 129 }, // renamed from vfx_sparkle.png (512x258 = 4x2 grid)
     // vfx_fire_aura / vfx_smoke / vfx_confetti / vfx_laser are also sheets but on
     // irregular grids — kept as generated particle textures for now.
     // TODO: slice vfx_fire_aura (rotating ring), vfx_confetti, vfx_laser later.

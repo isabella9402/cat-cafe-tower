@@ -343,6 +343,12 @@ class GameScene extends Phaser.Scene {
   die() {
     if (this._dead) return;
     this._dead = true;
+    // Clear the fire-mode screen FX. update() early-returns once dead, so if the
+    // cat died IN fire mode the vignette + 🔥 pulse would otherwise keep running
+    // through the whole death animation. Tidy them up here.
+    this._fireOn = false;
+    this._toggleFireFx(false);
+    this.comboLabel.setVisible(false);
     this.cat.die();
     this.cameras.main.shake(240, 0.02);
     if (navigator.vibrate) navigator.vibrate([40, 40, 90]);

@@ -32,12 +32,18 @@ class Tower {
     this.outerRadius = GAME_CONFIG.TOWER_RADIUS;
     this.innerRadius = GAME_CONFIG.POST_RADIUS;
 
+    // coded central post (smooth cylinder, drawn behind the rings; shows through
+    // the small ring holes + gaps, like the Helix column)
+    this.postGraphics = scene.add.graphics().setDepth(5);
+    this._postW = 0;
+
     // Each level randomly picks one of these safe-ring designs for variety
-    // ("xen kẽ random"). All are true centre-holed donuts sized to the ring, so
-    // none of the clipping/bulge the old toy/bowl mats caused.
-    this.safeTexPool = ['platformSafe', 'platformSafe2', 'platformSafe3', 'platformSafe4',
+    // ("xen kẽ random"). Excludes platformSafe (tower_normal) & platformSafe12 —
+    // their art has a scratching-post nub in the centre that would clash with
+    // the coded post; the rest are clean centre-holed donuts.
+    this.safeTexPool = ['platformSafe2', 'platformSafe3', 'platformSafe4',
       'platformSafe5', 'platformSafe6', 'platformSafe7', 'platformSafe8', 'platformSafe9',
-      'platformSafe10', 'platformSafe11', 'platformSafe12'].filter((k) => hasTex(scene, k));
+      'platformSafe10', 'platformSafe11'].filter((k) => hasTex(scene, k));
     if (!this.safeTexPool.length) this.safeTexPool = [PLATFORM_TEX[SEGMENT_TYPE.SAFE]];
 
     scene.events.once('shutdown', () => this.destroy());
@@ -338,7 +344,33 @@ class Tower {
         mask.setPosition(this.centerX, cy).setRotation(this.rotation).setScale(scale);
       }
     }
-    // (no central post — rings float around an open centre)
+
+    this._drawPost(H);
+  }
+
+  // Smooth central cylinder (like the Helix column), drawn once behind the rings.
+  // A horizontal gradient (dark tan edges -> light cream centre) fakes the round
+  // 3D tube; it has no vertical detail so it needs no scroll. Width is a touch
+  // wider than the hole so every ring hole reveals post, not background.
+  _drawPost(H) {
+    const W = Math.round(GAME_CONFIG.POST_RADIUS * 2 * 1.15);   // ~ hole diameter + margin
+    if (this._postW === W && this._postX === this.centerX) return;   // static: draw once
+    this._postW = W; this._postX = this.centerX;
+    const g = this.postGraphics;
+    g.clear();
+    const x = this.centerX;
+    const edge = 0xB98D5A, centre = 0xF4E9D2;   // tan rim -> cream highlight
+    const steps = 44;
+    for (let i = 0; i < steps; i++) {
+      const t = i / (steps - 1);                 // 0 (left) .. 1 (right)
+      const d = Math.abs(t - 0.5) * 2;           // 0 centre .. 1 edge
+      const col = lerpColor(centre, edge, Math.pow(d, 1.35));
+      g.fillStyle(col, 1);
+      g.fillRect(x - W / 2 + t * W, -20, W / steps + 1.5, H + 40);
+    }
+    // soft off-centre sheen for a rounded highlight
+    g.fillStyle(0xffffff, 0.16);
+    g.fillRect(x - W * 0.20, -20, W * 0.14, H + 40);
   }
 
   // ---- lifecycle ---------------------------------------------------------
@@ -355,5 +387,6 @@ class Tower {
   destroy() {
     this.levels.forEach((l) => this._disposeLevel(l));
     this.levels = [];
+    if (this.postGraphics) { this.postGraphics.destroy(); this.postGraphics = null; }
   }
 }

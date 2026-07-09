@@ -254,6 +254,18 @@ class GameScene extends Phaser.Scene {
   // ------------------------------------------------------------------ HUD
   //  Laid out for the fixed 540x960 canvas.
   _buildHUD() {
+    // F7: depth-marker badge plate behind the top-left stage cluster
+    if (hasTex(this, 'depthBadge')) {
+      this.depthBadge = this.add.image(60, 40, 'depthBadge').setOrigin(0.5).setDepth(179);
+      this.depthBadge.setDisplaySize(96, 96);
+    }
+    // F6: combo-meter frame plate behind the top-center combo cluster
+    if (hasTex(this, 'comboMeter')) {
+      this.comboMeterBg = this.add.image(270, 70, 'comboMeter').setOrigin(0.5).setDepth(179);
+      const cw = this.comboMeterBg.width || 512;
+      this.comboMeterBg.setDisplaySize(236, 236 * (this.comboMeterBg.height / cw));
+    }
+
     // score (top-right, right-aligned) + coin icon just to its left
     this.coinPrefix = '';
     this.scoreText = addStyledText(this, 500, 24, '0',

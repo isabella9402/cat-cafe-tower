@@ -241,6 +241,19 @@ class Tower {
     if (segment.type === SEGMENT_TYPE.DANGER) color = GAME_CONFIG.COLOR_PLATFORM_DANGER;
     else if (segment.type === SEGMENT_TYPE.BOUNCE) color = GAME_CONFIG.COLOR_PLATFORM_BOUNCE;
 
+    // F5: one-shot burst flash sprite over the shatter point (art, if loaded)
+    if (hasTex(this.scene, 'destroyVfx')) {
+      const flash = this.scene.add.image(burstX, burstY, 'destroyVfx').setDepth(62);
+      flash.setDisplaySize(120, 120 * (flash.height / flash.width || 0.42));
+      flash.setScale(flash.scaleX * 0.5, flash.scaleY * 0.5);
+      this.scene.tweens.add({
+        targets: flash,
+        scaleX: flash.scaleX * 2.4, scaleY: flash.scaleY * 2.4,
+        alpha: 0, duration: 340, ease: 'Quad.easeOut',
+        onComplete: () => flash.destroy(),
+      });
+    }
+
     for (let i = 0; i < pieces; i++) {
       const angle = Math.random() * TWO_PI;
       const dist = randomInRange(60, 140);
@@ -348,29 +361,57 @@ class Tower {
     this._drawPost(H);
   }
 
-  // Smooth central cylinder (like the Helix column), drawn once behind the rings.
-  // A horizontal gradient (dark tan edges -> light cream centre) fakes the round
-  // 3D tube; it has no vertical detail so it needs no scroll. Width is a touch
-  // wider than the hole so every ring hole reveals post, not background.
+  // Helix-Jump style central pillar: a mustard/gold column with an organic,
+  // vase-like silhouette (subtle bulges + pinches that scroll past as the cat
+  // falls) plus a rounded-tube gradient (bright gold highlight left-of-centre
+  // -> mustard mid -> deep amber shadow toward the right edge). The bulges are
+  // keyed to worldY (= _camY + y) so the pillar reads as moving vertically; the
+  // width therefore changes every frame, so this redraws every call (no cache).
   _drawPost(H) {
     const W = Math.round(GAME_CONFIG.POST_RADIUS * 2 * 1.15);   // ~ hole diameter + margin
-    if (this._postW === W && this._postX === this.centerX) return;   // static: draw once
-    this._postW = W; this._postX = this.centerX;
     const g = this.postGraphics;
     g.clear();
     const x = this.centerX;
-    const edge = 0xB98D5A, centre = 0xF4E9D2;   // tan rim -> cream highlight
-    const steps = 44;
-    for (let i = 0; i < steps; i++) {
-      const t = i / (steps - 1);                 // 0 (left) .. 1 (right)
+
+    // 3-stop horizontal ramp: centre highlight -> mustard mid -> amber edge.
+    // Precompute once per call and reuse for every slice (perf). The midtone is
+    // weighted to dominate via a two-stage lerp with a slight pow curve.
+    const HI = 0xF0C860, MID = 0xE5B94A, EDGE = 0xB8912E;
+    const bands = 24;
+    const ramp = new Array(bands);
+    for (let j = 0; j < bands; j++) {
+      const t = j / (bands - 1);                 // 0 (left) .. 1 (right)
       const d = Math.abs(t - 0.5) * 2;           // 0 centre .. 1 edge
-      const col = lerpColor(centre, edge, Math.pow(d, 1.35));
-      g.fillStyle(col, 1);
-      g.fillRect(x - W / 2 + t * W, -20, W / steps + 1.5, H + 40);
+      const dc = Math.pow(d, 1.35);              // bias toward the midtone
+      ramp[j] = dc < 0.5
+        ? lerpColor(HI, MID, dc / 0.5)           // centre -> mid
+        : lerpColor(MID, EDGE, (dc - 0.5) / 0.5); // mid -> edge
     }
-    // soft off-centre sheen for a rounded highlight
-    g.fillStyle(0xffffff, 0.16);
-    g.fillRect(x - W * 0.20, -20, W * 0.14, H + 40);
+
+    // Vertical slices spanning a touch beyond the screen so the ends never show.
+    const y0 = -20, y1 = H + 20;
+    const slices = 40;
+    const sliceH = (y1 - y0) / slices;
+    const minW = W * 0.92;                        // never narrower than the ring hole
+
+    for (let s = 0; s < slices; s++) {
+      const y = y0 + s * sliceH;
+      const worldY = this._camY + y;              // bulges scroll with the world
+      const wob = Math.sin(worldY * 0.008) * (W * 0.14)
+                + Math.sin(worldY * 0.021 + 1.7) * (W * 0.06);
+      const sliceW = Math.max(W + wob, minW);
+      const left = x - sliceW / 2;
+      const bandW = sliceW / bands;
+
+      for (let j = 0; j < bands; j++) {
+        g.fillStyle(ramp[j], 1);
+        g.fillRect(left + j * bandW, y, bandW + 1, sliceH + 1);
+      }
+
+      // rounded-tube sheen — follows the bulge (≈20% left of centre, ~12% wide)
+      g.fillStyle(0xffffff, 0.16);
+      g.fillRect(x - sliceW * 0.20, y, sliceW * 0.12, sliceH + 1);
+    }
   }
 
   // ---- lifecycle ---------------------------------------------------------

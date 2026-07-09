@@ -13,7 +13,10 @@ const config = {
                               // 'transparent' is NOT a valid Phaser color.
   scale: {
     mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+    // CSS flexbox (#game) centers the canvas. Using Phaser CENTER_BOTH *as well*
+    // double-offsets it and pushes the canvas to the right on wide windows, so
+    // autoCenter is disabled here and CSS is the single source of centering.
+    autoCenter: Phaser.Scale.NO_CENTER,
     width: 540,               // logical game width  (9:16)
     height: 960,              // logical game height
     // NOTE: `resolution` is intentionally omitted — it is non-functional in
